@@ -222,6 +222,7 @@ model/
 !deploy.sh
 !start.sh
 !fix_migrations.py
+!fix_phone_before_migrations.py
 !create_initial_migration.py
 !fix_users_migration.py
 !create_database_schema.py
@@ -420,6 +421,7 @@ quick_*.py
 check_*.py
 create_*.py
 fix_*.py
+!fix_phone_before_migrations.py
 setup_*.py
 refresh_*.py
 generate_*.py

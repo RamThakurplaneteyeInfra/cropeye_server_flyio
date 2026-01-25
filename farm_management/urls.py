@@ -20,8 +20,14 @@ def root_view(request):
             "api_docs": "/swagger/",
             "admin": "/admin/",
             "users": "/api/users/",
-            "messaging": "/api/conversations/",
             "farms": "/api/farms/",
+            "equipment": "/api/equipment/",
+            "bookings": "/api/bookings/",
+            "inventory": "/api/inventory/",
+            "vendors": "/api/vendors/",
+            "messaging": "/api/conversations/",
+            "chatbot": "/api/chatbot/",
+            "tasks": "/api/tasks/",
         }
     })
 
