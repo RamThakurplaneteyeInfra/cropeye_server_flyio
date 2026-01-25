@@ -196,6 +196,7 @@ utilsbot.py
 *.md
 !README.md
 !DEPLOYMENT.md
+!FLY_DEPLOY.md
 
 # Log files
 *.log
@@ -432,6 +433,7 @@ utilsbot.py
 *.md
 !README.md
 !DEPLOYMENT.md
+!FLY_DEPLOY.md
 
 # Log files
 *.log

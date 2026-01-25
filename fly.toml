@@ -1,0 +1,46 @@
+# Fly.io app configuration for CropEye Django API
+# Deploy: fly deploy
+# Docs: https://fly.io/docs/reference/configuration/
+
+app = "cropeye-server"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  DJANGO_SETTINGS_MODULE = "farm_management.settings_production"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 80
+    hard_limit = 100
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/health/"
+
+[deploy]
+  release_command = "python enable_postgis_neon.py && python manage.py migrate --noinput"
+  release_command_timeout = "10m"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+
+kill_signal = "SIGTERM"
+kill_timeout = 120
+
+primary_region = "sin"
+
+console_command = "/app/manage.py shell"

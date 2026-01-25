@@ -31,16 +31,15 @@ else:
     ALLOWED_HOSTS = [h for h in ALLOWED_HOSTS if not h.startswith('*')]
 
 # Always add Render service domains (required for Render deployment)
-# These are added to ensure Render deployment works even if env var is misconfigured
 render_domains = [
-    'cropeye-server-1.onrender.com',  # Your Render service domain
+    'cropeye-server-1.onrender.com',
     'cropeye-server.onrender.com',
     'farm-management-web.onrender.com',
 ]
-
-# Add Render domains if not already present
-# Note: If ALLOWED_HOSTS is ['*'], these aren't needed but adding them doesn't hurt
-for domain in render_domains:
+# Fly.io domains (FLY_APP_NAME is set by Fly at runtime)
+fly_app = os.environ.get('FLY_APP_NAME', 'cropeye-server')
+fly_domains = [f'{fly_app}.fly.dev', '.fly.dev']
+for domain in render_domains + fly_domains:
     if domain not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(domain)
 
@@ -50,6 +49,17 @@ if ALLOWED_HOSTS != ['*']:
         ALLOWED_HOSTS.append('localhost')
     if '127.0.0.1' not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append('127.0.0.1')
+
+# CSRF trusted origins (required for Django 4.1+ with cross-origin form POSTs)
+csrf_origins = [
+    f'https://{fly_app}.fly.dev',
+    'https://cropeye-server-1.onrender.com',
+    'https://cropeye-server.onrender.com',
+]
+_csrf_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+if _csrf_env:
+    csrf_origins.extend(o.strip() for o in _csrf_env.split(',') if o.strip())
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(csrf_origins))
 
 # Application definition
 INSTALLED_APPS = [
@@ -347,13 +357,21 @@ LOGGING = {
     },
 }
 
-# Cache configuration (Redis recommended for production)
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+# Cache configuration (Redis recommended for production; use dummy on Fly.io if no Redis)
+_redis_url = os.environ.get('REDIS_URL', '').strip()
+if _redis_url:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': _redis_url,
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
+        }
+    }
 
 # Celery configuration (if using background tasks)
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')

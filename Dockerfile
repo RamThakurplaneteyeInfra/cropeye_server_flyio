@@ -48,11 +48,12 @@ RUN adduser --disabled-password --gecos '' appuser
 RUN chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
+# Expose port (Fly.io uses 8080 via PORT; Render/local use 8000 default)
+EXPOSE 8080
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+# Health check (Fly uses fly.toml http_service.checks; this is for local Docker)
+HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/api/health/ || exit 1
 
 # Run the application using the wrapper script
