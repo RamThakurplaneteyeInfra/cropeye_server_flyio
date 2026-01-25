@@ -34,6 +34,7 @@ else:
 render_domains = [
     'cropeye-server-1.onrender.com',
     'cropeye-server.onrender.com',
+    'cropeye-server-flyio.onrender.com',
     'farm-management-web.onrender.com',
 ]
 # Render sets RENDER_EXTERNAL_HOSTNAME (e.g. your-service.onrender.com) – add if present
@@ -59,6 +60,7 @@ csrf_origins = [
     f'https://{fly_app}.fly.dev',
     'https://cropeye-server-1.onrender.com',
     'https://cropeye-server.onrender.com',
+    'https://cropeye-server-flyio.onrender.com',
     'https://farm-management-web.onrender.com',
 ]
 if _render_host:
