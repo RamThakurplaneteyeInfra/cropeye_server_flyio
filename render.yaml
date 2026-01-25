@@ -1,66 +1,29 @@
-# Note: Using external hosted database instead of Render database
-# If you want to use Render's database service, uncomment the databases section below
-# and change envVars to use fromDatabase instead of value
-
-# databases:
-#   # PostgreSQL Database (uncomment if using Render database)
-#   - name: farm-management-db
-#     plan: starter
-#     region: oregon
+# Render Blueprint: CropEye Django API
+# Uses Neon PostgreSQL (DATABASE_URL). Redis optional; app uses DummyCache if REDIS_URL not set.
+# See RENDER_DEPLOY.md for setup steps.
 
 services:
-  # Redis Cache
-  - type: redis
-    name: farm-management-redis
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
-    ipAllowList: []
-
-  # Django Web Application
   - type: web
     name: farm-management-web
     env: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     envVars:
       - key: DEBUG
-        value: False
+        value: "False"
       - key: SECRET_KEY
         generateValue: true
       - key: DJANGO_SETTINGS_MODULE
         value: farm_management.settings_production
-      # External hosted database configuration
-      # IMPORTANT: Set these values in Render dashboard Environment tab
-      # Do not commit actual credentials to git
-      - key: DB_NAME
-        sync: false # Set manually in Render dashboard
-      - key: DB_USER
-        sync: false # Set manually in Render dashboard
-      - key: DB_PASSWORD
-        sync: false # Set manually in Render dashboard
-      - key: DB_HOST
-        sync: false # Set manually in Render dashboard
-      - key: DB_PORT
-        value: "5432"
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: farm-management-redis
-          property: connectionString
-      - key: CELERY_BROKER_URL
-        fromService:
-          type: redis
-          name: farm-management-redis
-          property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          type: redis
-          name: farm-management-redis
-          property: connectionString
+      # Neon PostgreSQL – set in Render Dashboard → Environment → Secret Files / Environment
+      - key: DATABASE_URL
+        sync: false
       - key: ALLOWED_HOSTS
-        value: "cropeye-server-1.onrender.com,cropeye-server.onrender.com,farm-management-web.onrender.com,localhost,127.0.0.1"
+        value: "farm-management-web.onrender.com,cropeye-server-1.onrender.com,cropeye-server.onrender.com,localhost,127.0.0.1"
       - key: CORS_ALLOWED_ORIGINS
-        value: "https://*.onrender.com,http://localhost:3000"
+        value: "https://farm-management-web.onrender.com,https://cropeye-server-1.onrender.com,https://cropeye-server.onrender.com,http://localhost:3000,http://localhost:5173"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://farm-management-web.onrender.com,https://cropeye-server-1.onrender.com,https://cropeye-server.onrender.com"
       - key: EMAIL_HOST
         value: smtp.gmail.com
       - key: EMAIL_PORT

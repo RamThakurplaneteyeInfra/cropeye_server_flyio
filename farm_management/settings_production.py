@@ -36,6 +36,10 @@ render_domains = [
     'cropeye-server.onrender.com',
     'farm-management-web.onrender.com',
 ]
+# Render sets RENDER_EXTERNAL_HOSTNAME (e.g. your-service.onrender.com) – add if present
+_render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if _render_host and _render_host not in render_domains:
+    render_domains.append(_render_host)
 # Fly.io domains (FLY_APP_NAME is set by Fly at runtime)
 fly_app = os.environ.get('FLY_APP_NAME', 'cropeye-server')
 fly_domains = [f'{fly_app}.fly.dev', '.fly.dev']
@@ -55,7 +59,10 @@ csrf_origins = [
     f'https://{fly_app}.fly.dev',
     'https://cropeye-server-1.onrender.com',
     'https://cropeye-server.onrender.com',
+    'https://farm-management-web.onrender.com',
 ]
+if _render_host:
+    csrf_origins.append(f'https://{_render_host}')
 _csrf_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
 if _csrf_env:
     csrf_origins.extend(o.strip() for o in _csrf_env.split(',') if o.strip())
