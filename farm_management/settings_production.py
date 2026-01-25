@@ -16,33 +16,26 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-this-in-produc
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-# ALLOWED_HOSTS - Configure allowed hosts for production
-# On Render, RENDER_EXTERNAL_HOSTNAME is set – allow all hosts so any *.onrender.com works
+# ALLOWED_HOSTS - Use '*' in production (Render/Fly reverse-proxy deployments)
+# Render and Fly terminate TLS and forward Host; exact hostnames vary. Restricting
+# causes DisallowedHost. Restrict via ALLOWED_HOSTS env only if you run without a proxy.
 _render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 fly_app = os.environ.get('FLY_APP_NAME', 'cropeye-server')
-if _render_host:
-    ALLOWED_HOSTS = ['*']
-else:
-    allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '')
-    if allowed_hosts_env == '*' or not allowed_hosts_env:
-        ALLOWED_HOSTS = ['*']
-    else:
-        ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(',') if h.strip()]
-        ALLOWED_HOSTS = [h for h in ALLOWED_HOSTS if not h.startswith('*')]
-    render_domains = [
-        'cropeye-server-1.onrender.com',
-        'cropeye-server.onrender.com',
-        'cropeye-server-flyio.onrender.com',
-        'farm-management-web.onrender.com',
-    ]
-    fly_domains = [f'{fly_app}.fly.dev', '.fly.dev']
-    for domain in render_domains + fly_domains:
+allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '').strip()
+if allowed_hosts_env and allowed_hosts_env != '*':
+    ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(',') if h.strip()]
+    ALLOWED_HOSTS = [h for h in ALLOWED_HOSTS if not h.startswith('*')]
+    for domain in (
+        'cropeye-server-1.onrender.com', 'cropeye-server.onrender.com',
+        'cropeye-server-flyio.onrender.com', 'farm-management-web.onrender.com',
+        f'{fly_app}.fly.dev', '.fly.dev', 'localhost', '127.0.0.1',
+    ):
         if domain not in ALLOWED_HOSTS:
             ALLOWED_HOSTS.append(domain)
-    if ALLOWED_HOSTS != ['*']:
-        for h in ('localhost', '127.0.0.1'):
-            if h not in ALLOWED_HOSTS:
-                ALLOWED_HOSTS.append(h)
+    if _render_host and _render_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_render_host)
+else:
+    ALLOWED_HOSTS = ['*']
 
 # CSRF trusted origins (required for Django 4.1+ with cross-origin form POSTs)
 csrf_origins = [
