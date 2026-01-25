@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
@@ -87,6 +88,13 @@ class IndustrySerializer(serializers.ModelSerializer):
     class Meta:
         model = Industry
         fields = ['id', 'name', 'description']
+
+
+class GroupSerializer(serializers.ModelSerializer):
+    """Serializer for Django's auth Group (User Management > Groups)."""
+    class Meta:
+        model = Group
+        fields = ['id', 'name']
 
 
 class UserSerializer(serializers.ModelSerializer):

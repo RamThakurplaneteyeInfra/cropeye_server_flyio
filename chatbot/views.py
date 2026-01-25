@@ -2,13 +2,22 @@ import json
 import logging
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework import viewsets, status, permissions
 from rest_framework.permissions import AllowAny
-from rest_framework import status
 from rest_framework.response import Response
 
 from .chatbot_service import generate_chatbot_response
+from .models import ChatbotConfig
+from .serializers import ChatbotConfigSerializer
 
 logger = logging.getLogger(__name__)
+
+
+class ChatbotConfigViewSet(viewsets.ModelViewSet):
+    """CRUD for Chatbot Configurations (Chatbot > Chatbot Configurations)."""
+    queryset = ChatbotConfig.objects.all().order_by('-updated_at')
+    serializer_class = ChatbotConfigSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
 
 @api_view(['POST'])

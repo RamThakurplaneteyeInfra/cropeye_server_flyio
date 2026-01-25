@@ -234,7 +234,7 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
-# Swagger settings
+# Swagger settings – tag all modules (Users, Farms, Equipment, etc.) so they appear in UI
 SWAGGER_SETTINGS = {
     'SECURITY_DEFINITIONS': {
         'Bearer': {
@@ -242,7 +242,8 @@ SWAGGER_SETTINGS = {
             'name': 'Authorization',
             'in': 'header'
         }
-    }
+    },
+    'DEFAULT_AUTO_SCHEMA_CLASS': 'farm_management.swagger_schema.TaggedSwaggerAutoSchema',
 }
 
 # Email settings

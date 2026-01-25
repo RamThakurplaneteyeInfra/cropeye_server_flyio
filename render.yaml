@@ -1,6 +1,10 @@
 # Render Blueprint: CropEye Django API
 # Uses Neon PostgreSQL (DATABASE_URL). Redis optional; app uses DummyCache if REDIS_URL not set.
 # See RENDER_DEPLOY.md for setup steps.
+#
+# No modules or apps are excluded here. All Django apps (users, farms, equipment, bookings,
+# inventory, vendors, messaging, chatbot, tasks, industries) are deployed via the Dockerfile
+# and ROOT_URLCONF in settings_production. Exclusions come only from .gitignore / .dockerignore.
 
 services:
   - type: web
