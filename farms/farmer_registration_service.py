@@ -354,6 +354,7 @@ class CompleteFarmerRegistrationService:
                 defaults={'description': f"Auto-created: {farm_data['soil_type_name']}"}
             )
         
+        
         # Get crop type if provided
         crop_type = None
         if farm_data.get('crop_type_id'):
@@ -445,26 +446,22 @@ class CompleteFarmerRegistrationService:
             # Get industry from field officer
             industry = get_user_industry(field_officer) if field_officer else None
             
-            # Build query filters
-            query_filters = {
-                'crop_type': crop_type_name,
-                'plantation_type': plantation_type_str if plantation_type_str else '',
-                'planting_method': planting_method_str if planting_method_str else '',
-                'industry': industry,
-            }
+            # Use get_or_create with all fields to ensure uniqueness (including industry)
+            crop_type, created = CropType.objects.get_or_create(
+                crop_type=crop_type_name,
+                plantation_type=plantation_type_str if plantation_type_str else '',
+                planting_method=planting_method_str if planting_method_str else '',
+                industry=industry,
+                defaults={}
+            )
             
-            # Use filter().first() to handle potential duplicates gracefully
-            # This prevents MultipleObjectsReturned error when multiple CropTypes exist
-            crop_type = CropType.objects.filter(**query_filters).first()
-            
-            if crop_type:
-                # CropType exists, update if needed
-                created = False
+            if created:
+                logger.info(f"Created CropType '{crop_type_name}' with plantation_type={plantation_type_str}, planting_method={planting_method_str}, industry={industry}")
+            else:
+                # Ensure plantation data and industry are set (in case they were None before)
                 needs_update = False
-                if crop_type.plantation_type != (plantation_type_str if plantation_type_str else ''):
+                if crop_type.plantation_type != plantation_type_str or crop_type.planting_method != planting_method_str:
                     crop_type.plantation_type = plantation_type_str if plantation_type_str else ''
-                    needs_update = True
-                if crop_type.planting_method != (planting_method_str if planting_method_str else ''):
                     crop_type.planting_method = planting_method_str if planting_method_str else ''
                     needs_update = True
                 if crop_type.industry != industry:
@@ -473,11 +470,6 @@ class CompleteFarmerRegistrationService:
                 if needs_update:
                     crop_type.save()
                     logger.info(f"Updated CropType '{crop_type_name}' with plantation data and industry")
-            else:
-                # CropType doesn't exist, create it
-                crop_type = CropType.objects.create(**query_filters)
-                created = True
-                logger.info(f"Created CropType '{crop_type_name}' with plantation_type={plantation_type_str}, planting_method={planting_method_str}, industry={industry}")
         
         # Parse plantation_date if provided
         plantation_date = None
@@ -526,19 +518,37 @@ class CompleteFarmerRegistrationService:
         
         # Create farm
         farm = Farm.objects.create(
-            address=farm_data['address'],
-            area_size=farm_data['area_size'],
-            farm_owner=farmer,  # Auto-assign to farmer
-            created_by=field_officer,
-            plot=plot,
-            soil_type=soil_type,
-            crop_type=crop_type,
-            plantation_date=plantation_date,
-            spacing_a=farm_data.get('spacing_a'),
-            spacing_b=farm_data.get('spacing_b'),
-            crop_variety=crop_variety,
-            industry=industry  # Assign industry from field officer
-        )
+        address=farm_data['address'],
+        area_size=farm_data['area_size'],
+        farm_owner=farmer,
+        created_by=field_officer,
+        plot=plot,
+        soil_type=soil_type,
+        crop_type=crop_type,
+        plantation_date=plantation_date,
+        spacing_a=farm_data.get('spacing_a'),
+        spacing_b=farm_data.get('spacing_b'),
+        crop_variety=crop_variety,
+        industry=industry,
+        
+        # Add the rest of your fields
+        sugarcane_plantation_type=farm_data.get('sugarcane_plantation_type'),
+        sugarcane_planting_method=farm_data.get('sugarcane_planting_method'),
+        grapes_plantation_type=farm_data.get('grapes_plantation_type'),
+        variety_type=farm_data.get('variety_type'),
+        variety_subtype=farm_data.get('variety_subtype'),
+        variety_timing=farm_data.get('variety_timing'),
+        plant_age=farm_data.get('plant_age'),
+        foundation_pruning_date=farm_data.get('foundation_pruning_date'),
+        fruit_pruning_date=farm_data.get('fruit_pruning_date'),
+        last_harvesting_date=farm_data.get('last_harvesting_date'),
+        resting_period_days=farm_data.get('resting_period_days'),
+        row_spacing=farm_data.get('row_spacing'),
+        plant_spacing=farm_data.get('plant_spacing'),
+        flow_rate_liter_per_hour=farm_data.get('flow_rate_liter_per_hour'),
+        emitters_per_plant=farm_data.get('emitters_per_plant'),
+    )
+
         
         logger.info(f"Created farm: {farm.farm_uid} (ID: {farm.id}) for farmer {farmer.username} with plantation_date: {plantation_date}, crop_variety: {crop_variety}")
         return farm

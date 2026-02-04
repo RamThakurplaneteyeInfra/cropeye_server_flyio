@@ -20,14 +20,8 @@ def root_view(request):
             "api_docs": "/swagger/",
             "admin": "/admin/",
             "users": "/api/users/",
-            "farms": "/api/farms/",
-            "equipment": "/api/equipment/",
-            "bookings": "/api/bookings/",
-            "inventory": "/api/inventory/",
-            "vendors": "/api/vendors/",
             "messaging": "/api/conversations/",
-            "chatbot": "/api/chatbot/",
-            "tasks": "/api/tasks/",
+            "farms": "/api/farms/",
         }
     })
 
@@ -42,7 +36,6 @@ schema_view = get_schema_view(
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
-    url=r'^api/',
 )
 
 urlpatterns = [
@@ -54,12 +47,13 @@ urlpatterns = [
     
     # API endpoints
     path('api/', include('users.urls')),
-    path('api/', include('farms.urls')),
+    path('api/', include('farms.urls')), 
     path('api/', include('equipment.urls')),
     path('api/', include('bookings.urls')),
     path('api/', include('inventory.urls')),
     path('api/', include('vendors.urls')),
-    path('api/', include('messaging.urls')),
+    path('api/', include('farms.urls')),
+    path('api/', include('messaging.urls')),  # Messaging system
     path('api/', include('chatbot.urls')),
     path('api/tasks/', include('tasks.urls')),
 

@@ -1,15 +1,12 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, IndustryViewSet, RoleViewSet, GroupViewSet
+from .views import UserViewSet
 from .login_view import LoginView, PasswordResetRequestView, PasswordResetConfirmView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .serializers import CustomTokenObtainPairSerializer
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
-router.register(r'industries', IndustryViewSet, basename='industry')
-router.register(r'roles', RoleViewSet, basename='role')
-router.register(r'groups', GroupViewSet, basename='group')
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """

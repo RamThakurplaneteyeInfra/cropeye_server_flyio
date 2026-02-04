@@ -8,18 +8,14 @@ from django.utils import timezone
 from datetime import timedelta
 import random
 import string
-from django.contrib.auth.models import Group
 from .models import Role, Industry
 from .serializers import (
-    UserSerializer,
+    UserSerializer, 
     UserCreateSerializer,
     FieldOfficerWithFarmersSerializer,
     FieldOfficerSerializer,
     OwnerHierarchySerializer,
-    ManagerHierarchySerializer,
-    IndustrySerializer,
-    RoleSerializer,
-    GroupSerializer,
+    ManagerHierarchySerializer
 )
 from .permissions import IsManager, IsOwner
 from .multi_tenant_utils import filter_by_industry, get_accessible_users, get_user_industry
@@ -1537,24 +1533,3 @@ class UserViewSet(viewsets.ModelViewSet):
                     'vendors_count': vendors_count,
                 }
             })
-
-
-class IndustryViewSet(viewsets.ModelViewSet):
-    """CRUD for Industries (User Management > Industries)."""
-    queryset = Industry.objects.all().order_by('name')
-    serializer_class = IndustrySerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-
-class RoleViewSet(viewsets.ModelViewSet):
-    """CRUD for Roles (User Management > Roles)."""
-    queryset = Role.objects.all().order_by('name')
-    serializer_class = RoleSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-
-class GroupViewSet(viewsets.ModelViewSet):
-    """CRUD for Django auth Groups (User Management > Groups)."""
-    queryset = Group.objects.all().order_by('name')
-    serializer_class = GroupSerializer
-    permission_classes = [permissions.IsAuthenticated]
