@@ -32,14 +32,9 @@ services:
     env_file:
       - .env
     environment:
-      # Hosted database configuration
-      - DB_HOST=dev-et.cropeye.ai
-      - DB_PORT=5432
-      - DB_NAME=CROPDB_TEST
-      - DB_USER=farm_management_l1wj_user
-      - DB_PASSWORD=DySO3fcTFjb8Rgp9IZIxGYgLZ7KxwmjL
-      - ALLOWED_HOSTS=* # Allow all hosts for local network access
-      - DEBUG=True # Enable DEBUG for local development
+      # DATABASE_URL from .env is used for Neon; set here to override if needed
+      - ALLOWED_HOSTS=*
+      - DEBUG=True
     # Removed depends_on since we're using hosted database, not local db service
     # depends_on:
     #   db:

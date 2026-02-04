@@ -145,18 +145,36 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'farm_management.wsgi.application'
 
-# Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.contrib.gis.db.backends.postgis',  # use 'django.db.backends.postgresql' if not using GIS
-        'NAME': os.environ.get('DB_NAME', 'cropeye'),       # default local DB name
-        'USER': os.environ.get('DB_USER', 'cropeye_user'),  # default local DB user
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'cropeye123'),  # default password
-        'HOST': os.environ.get('DB_HOST', 'localhost'),     # local DB host
-        'PORT': os.environ.get('DB_PORT', '5432'),          # default PostgreSQL port
-        # Remove SSL options for local development
+# Database - use DATABASE_URL (Neon) when set, otherwise local DB
+from urllib.parse import urlparse, unquote
+
+def _parse_database_url(url: str) -> dict:
+    """Parse PostgreSQL DATABASE_URL into Django DATABASES config."""
+    p = urlparse(url)
+    return {
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
+        'NAME': (p.path or '/').lstrip('/') or 'neondb',
+        'USER': unquote(p.username) if p.username else '',
+        'PASSWORD': unquote(p.password) if p.password else '',
+        'HOST': p.hostname or 'localhost',
+        'PORT': str(p.port) if p.port else '5432',
+        'OPTIONS': {'sslmode': 'require'} if 'sslmode=require' in (p.query or '') else {},
     }
-}
+
+_database_url = os.environ.get('DATABASE_URL')
+if _database_url and _database_url.strip().startswith('postgresql'):
+    DATABASES = {'default': _parse_database_url(_database_url)}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.contrib.gis.db.backends.postgis',
+            'NAME': os.environ.get('DB_NAME', 'cropeye'),
+            'USER': os.environ.get('DB_USER', 'cropeye_user'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', 'cropeye123'),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
+    }
 
 
 
