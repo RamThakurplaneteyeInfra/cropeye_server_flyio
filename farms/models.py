@@ -145,6 +145,8 @@ class CropType(models.Model):
         blank=True,
         help_text="Planting method for this crop"
     )
+    plantation_date = models.DateField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -409,62 +411,12 @@ class Farm(models.Model):
         blank=True
     )
     farm_document = models.FileField(upload_to='farm_documents/', null=True, blank=True)
-    
-    plantation_date = models.DateField(null=True, blank=True, help_text="Date when crops were planted")
-    
     spacing_a = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, help_text="Spacing A in meters")
     spacing_b = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, help_text="Spacing B in meters")
-    
+    plantation_date = models.DateField(null=True, blank=True)
+
     crop_variety = models.CharField(max_length=200, null=True, blank=True, help_text="Crop variety (e.g., Co 86032, Co 8371, etc.)")
     
-    SUGARCANE_PLANTATION_CHOICES = [
-        ('', '---------'),
-        ('adsali', 'Adsali'),
-        ('suru', 'Suru'),
-        ('ratoon', 'Ratoon'),
-        ('pre-seasonal', 'Pre-Seasonal'),
-        ('post-seasonal', 'Post-Seasonal'),
-        ('pre_seasonal', 'Pre-Seasonal'),
-        ('other', 'Other'),
-    ]
-    sugarcane_plantation_type = models.CharField(
-        max_length=20,
-        choices=SUGARCANE_PLANTATION_CHOICES,
-        null=True,
-        blank=True
-    )
-
-    SUGARCANE_PLANTING_METHOD_CHOICES = [
-        ('', '---------'),
-        ('3_bud', '3 Bud Method'),
-        ('2_bud', '2 Bud Method'),
-        ('1_bud', '1 Bud Method'),
-        ('1_bud_stip_Method', '1 Bud (stip Method)'),
-        ('other', 'Other')
-    ]
-    sugarcane_planting_method = models.CharField(
-        max_length=30,
-        choices=SUGARCANE_PLANTING_METHOD_CHOICES,
-        null=True,
-        blank=True
-    )
-
-    # ===== Grapes Dropdowns =====
-    GRAPES_PLANTATION_CHOICES = [
-        ('', '---------'),
-        ('wine', 'Wine Grapes'),
-        ('table', 'Table Grapes'),
-        ('late', 'Late'),
-        ('early', 'Early'),
-        ('pre_season', 'Pre-Season'),
-        ('seasonal', 'Seasonal'),
-    ]
-    grapes_plantation_type = models.CharField(
-        max_length=20,
-        choices=GRAPES_PLANTATION_CHOICES,
-        null=True,
-        blank=True
-    )
 
 
     # ===== New Fields for Variety Info =====

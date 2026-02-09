@@ -79,11 +79,7 @@ class CropTypeSerializer(serializers.ModelSerializer):
         fields = ['id', 'crop_type', 'industry', 'industry_name', 'plantation_type', 'plantation_type_display', 'planting_method', 'planting_method_display', 'plantation_date']
     
     def get_plantation_date(self, obj):
-        # Get plantation_date from the parent Farm instance passed through context
-        farm = self.context.get('farm')
-        if farm and hasattr(farm, 'plantation_date'):
-            return farm.plantation_date.isoformat() if farm.plantation_date else None
-        return None
+     return obj.plantation_date
 
 
 class PlotSerializer(serializers.ModelSerializer):
@@ -290,11 +286,6 @@ class FarmWithIrrigationSerializer(serializers.ModelSerializer):
     # Sugarcane fields
     spacing_a = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, allow_null=True)
     spacing_b = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, allow_null=True)
-    sugarcane_plantation_type = serializers.ChoiceField(choices=Farm.SUGARCANE_PLANTATION_CHOICES, required=False, allow_null=True)
-    sugarcane_planting_method = serializers.ChoiceField(choices=Farm.SUGARCANE_PLANTING_METHOD_CHOICES, required=False, allow_null=True)
-
-    # Grapes fields
-    grapes_plantation_type = serializers.ChoiceField(choices=Farm.GRAPES_PLANTATION_CHOICES, required=False, allow_null=True)
     variety_type = serializers.ChoiceField(choices=Farm.VARIETY_TYPE_CHOICES, required=False, allow_null=True)
     variety_subtype = serializers.ChoiceField(choices=Farm.VARIETY_SUBTYPE_CHOICES, required=False, allow_null=True)
     variety_timing = serializers.ChoiceField(choices=Farm.VARIETY_TIMING_CHOICES, required=False, allow_null=True)
@@ -335,9 +326,8 @@ class FarmWithIrrigationSerializer(serializers.ModelSerializer):
             'soil_type', 'soil_type_id', 'crop_type', 'crop_type_name',
             'farm_document', 'plantation_date',
             # Sugarcane
-            'spacing_a', 'spacing_b', 'sugarcane_plantation_type', 'sugarcane_planting_method',
-            # Grapes
-            'grapes_plantation_type', 'variety_type', 'variety_subtype', 'variety_timing', 'plant_age',
+            'spacing_a', 'spacing_b', 
+            'variety_type', 'variety_subtype', 'variety_timing', 'plant_age',
             'foundation_pruning_date', 'fruit_pruning_date', 'last_harvesting_date', 'resting_period_days',
             # Drip irrigation
             'row_spacing', 'plant_spacing', 'flow_rate_liter_per_hour', 'emitters_per_plant',
@@ -487,11 +477,8 @@ class FarmSerializer(serializers.ModelSerializer):
     # Sugarcane fields
     spacing_a = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, allow_null=True)
     spacing_b = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, allow_null=True)
-    sugarcane_plantation_type = serializers.ChoiceField(choices=Farm.SUGARCANE_PLANTATION_CHOICES, required=False, allow_null=True)
-    sugarcane_planting_method = serializers.ChoiceField(choices=Farm.SUGARCANE_PLANTING_METHOD_CHOICES, required=False, allow_null=True)
-
+    
     # Grapes fields
-    grapes_plantation_type = serializers.ChoiceField(choices=Farm.GRAPES_PLANTATION_CHOICES, required=False, allow_null=True)
     variety_type = serializers.ChoiceField(choices=Farm.VARIETY_TYPE_CHOICES, required=False, allow_null=True)
     variety_subtype = serializers.ChoiceField(choices=Farm.VARIETY_SUBTYPE_CHOICES, required=False, allow_null=True)
     variety_timing = serializers.ChoiceField(choices=Farm.VARIETY_TIMING_CHOICES, required=False, allow_null=True)
@@ -524,14 +511,11 @@ class FarmSerializer(serializers.ModelSerializer):
                 'soil_type_id',
                 'crop_type',
                 'crop_type_name',
+                'plantation_date', 
                 'farm_document',
-                'plantation_date',
                 'spacing_a',
                 'spacing_b',
-                'sugarcane_plantation_type',   # added
-                'sugarcane_planting_method',   # added
                 'crop_variety',
-                'grapes_plantation_type',
                 'variety_type',
                 'variety_subtype',
                 'variety_timing',
@@ -549,6 +533,8 @@ class FarmSerializer(serializers.ModelSerializer):
                 'updated_at',
             ]
             read_only_fields = ['farm_uid', 'farm_owner', 'created_by', 'created_at', 'updated_at']
+            # Mapping human-readable values to DB choice values
+   
 
     def create(self, validated_data):
         user = self.context['request'].user
@@ -592,7 +578,7 @@ class FarmSerializer(serializers.ModelSerializer):
 
         # --- Ensure grapes and sugarcane fields are present ---
         grapes_fields = [
-            'grapes_plantation_type',
+        
             'variety_type',
             'variety_subtype',
             'variety_timing',
@@ -608,12 +594,9 @@ class FarmSerializer(serializers.ModelSerializer):
             'crop_variety',
         ]
 
-        sugarcane_fields = [
-            'sugarcane_plantation_type',
-            'sugarcane_planting_method',
-        ]
+       
 
-        for field in grapes_fields + sugarcane_fields:
+        for field in grapes_fields :
             validated_data.setdefault(field, None)  # Default to None if missing
 
         # Create farm with all validated data
@@ -654,7 +637,7 @@ class FarmSerializer(serializers.ModelSerializer):
 
         # --- Ensure grapes fields always exist ---
         grapes_fields = [
-            'grapes_plantation_type',
+            
             'variety_type',
             'variety_subtype',
             'variety_timing',
@@ -671,19 +654,10 @@ class FarmSerializer(serializers.ModelSerializer):
         ]
 
         for field in grapes_fields:
-            representation.setdefault(field, None)
+           representation.setdefault(field, None)
 
-        # --- Ensure sugarcane fields always exist ---
-        sugarcane_fields = [
-            'sugarcane_plantation_type',
-            'sugarcane_planting_method',
-        ]
-
-        for field in sugarcane_fields:
-            representation.setdefault(field, None)
 
         return representation
-
 
 class FarmDetailSerializer(FarmSerializer):
     images      = FarmImageSerializer(many=True, read_only=True)

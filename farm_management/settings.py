@@ -168,9 +168,9 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.contrib.gis.db.backends.postgis',
-            'NAME': os.environ.get('DB_NAME', 'cropeye'),
-            'USER': os.environ.get('DB_USER', 'cropeye_user'),
-            'PASSWORD': os.environ.get('DB_PASSWORD', 'cropeye123'),
+            'NAME': os.environ.get('DB_NAME', 'test_db'),
+            'USER': os.environ.get('DB_USER', 'test_user'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', 'test@123'),
             'HOST': os.environ.get('DB_HOST', 'localhost'),
             'PORT': os.environ.get('DB_PORT', '5432'),
         }

@@ -167,7 +167,7 @@ class FarmAdminForm(forms.ModelForm):
         model = Farm
         fields = '__all__'
         widgets = {
-            'plantation_date': forms.DateInput(attrs={'type': 'date'}),
+            
             'foundation_pruning_date': forms.DateInput(attrs={'type': 'date'}),
             'fruit_pruning_date': forms.DateInput(attrs={'type': 'date'}),
             'last_harvesting_date': forms.DateInput(attrs={'type': 'date'}),
@@ -188,7 +188,6 @@ class FarmAdmin(admin.ModelAdmin):
         'variety_subtype',
         'variety_timing',
         'plant_age',
-        'plantation_date',
         'get_created_by_email',
         'created_at',
     )
@@ -234,18 +233,15 @@ class FarmAdmin(admin.ModelAdmin):
                 'soil_type',
                 'crop_type',
                 'crop_variety',
-                'plantation_date',
                 'farm_document',
             )
         }),
         ('Sugarcane Specific', {
-            'fields': ('sugarcane_plantation_type',
-        'sugarcane_planting_method','spacing_a', 'spacing_b'),
+            'fields': ('spacing_a', 'spacing_b'),
             'classes': ('collapse',),
         }),
         ('Grapes Specific', {
             'fields': (
-                'grapes_plantation_type',
                 'variety_type',
                 'variety_subtype',
                 'variety_timing',

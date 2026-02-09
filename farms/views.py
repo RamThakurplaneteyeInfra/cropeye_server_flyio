@@ -8,6 +8,7 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+from django.db.models import Prefetch
 from users.multi_tenant_utils import filter_by_industry, get_user_industry
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -1139,47 +1140,50 @@ class PlotViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], permission_classes=[permissions.AllowAny])
     def public(self, request):
         """Public endpoint for plots with farm information - no authentication required"""
-        
-        # Get all plots with related data
-        queryset = Plot.objects.all().select_related(
-            'farmer', 
-            'created_by'
-        ).prefetch_related(
-            'farms__crop_type',
-            'farms__soil_type',
-            'farms__irrigations__irrigation_type',
-            'farms__farm_owner'
+
+        # Prefetch farms and their related objects
+        farm_prefetch = Prefetch(
+            'farms',
+            queryset=Farm.objects.select_related(
+                'crop_type',
+                'soil_type',
+                'farm_owner'
+            ).prefetch_related(
+                'irrigations__irrigation_type'
+            ),
+            to_attr='prefetched_farms'
         )
-        
+
+        # Get all plots with related farmer/creator and farms
+        queryset = Plot.objects.all().select_related(
+            'farmer',
+            'created_by'
+        ).prefetch_related(farm_prefetch)
+
         # Apply optional filters
         if gat_number := request.query_params.get('gat_number'):
             queryset = queryset.filter(gat_number=gat_number)
-        
         if village := request.query_params.get('village'):
             queryset = queryset.filter(village__icontains=village)
-        
         if district := request.query_params.get('district'):
             queryset = queryset.filter(district__icontains=district)
-        
         if state := request.query_params.get('state'):
             queryset = queryset.filter(state__icontains=state)
-        
-        # Build response with farm information
+
+        # Build response
         plots_data = []
-        
+
         for plot in queryset:
-            # Generate FastAPI plot ID
             if plot.gat_number and plot.plot_number:
                 fastapi_plot_id = f"{plot.gat_number}_{plot.plot_number}"
             elif plot.gat_number:
                 fastapi_plot_id = plot.gat_number
             else:
                 fastapi_plot_id = f"plot_{plot.id}"
-            
-            # Get farms for this plot
-            farms = plot.farms.all()
+
+            farms = getattr(plot, 'prefetched_farms', [])
+
             farm_details = []
-            
             for farm in farms:
                 farm_info = {
                     'id': farm.id,
@@ -1188,37 +1192,24 @@ class PlotViewSet(viewsets.ModelViewSet):
                     'plantation_type_code': farm.crop_type.plantation_type if farm.crop_type and farm.crop_type.plantation_type else None,
                     'planting_method': farm.crop_type.get_planting_method_display() if farm.crop_type and farm.crop_type.planting_method else None,
                     'planting_method_code': farm.crop_type.planting_method if farm.crop_type and farm.crop_type.planting_method else None,
-
-                    # IDs
                     'soil_type_id': farm.soil_type.id if farm.soil_type else None,
-                    'crop_type_name': farm.crop_type.crop_type if farm.crop_type else None,  # <-- Added this line
-                    # Crop/variety info
+                    'crop_type_name': farm.crop_type.crop_type if farm.crop_type else None,
                     'crop_variety': getattr(farm, 'crop_variety', None),
-                    'sugarcane_plantation_type': getattr(farm, 'sugarcane_plantation_type', None),
-                    'sugarcane_planting_method': getattr(farm, 'sugarcane_planting_method', None),
                     'spacing_a': getattr(farm, 'spacing_a', None),
                     'spacing_b': getattr(farm, 'spacing_b', None),
-                    'grapes_plantation_type': getattr(farm, 'grapes_plantation_type', None),
                     'variety_type': getattr(farm, 'variety_type', None),
                     'variety_subtype': getattr(farm, 'variety_subtype', None),
                     'variety_timing': getattr(farm, 'variety_timing', None),
                     'plant_age': getattr(farm, 'plant_age', None),
-
-                    # Important farm dates
                     'foundation_pruning_date': farm.foundation_pruning_date.isoformat() if farm.foundation_pruning_date else None,
                     'fruit_pruning_date': farm.fruit_pruning_date.isoformat() if farm.fruit_pruning_date else None,
                     'last_harvesting_date': farm.last_harvesting_date.isoformat() if farm.last_harvesting_date else None,
-
-                    # Irrigation info
                     'irrigations': [
                         {
                             'id': irrigation.id,
                             'type': irrigation.irrigation_type.name if irrigation.irrigation_type else None,
-                          
                         } for irrigation in farm.irrigations.all()
                     ],
-
-                    # Farm owner
                     'farm_owner': {
                         'id': farm.farm_owner.id,
                         'username': farm.farm_owner.username,
@@ -1226,7 +1217,7 @@ class PlotViewSet(viewsets.ModelViewSet):
                     } if farm.farm_owner else None
                 }
                 farm_details.append(farm_info)
-            
+
             plot_data = {
                 'id': plot.id,
                 'fastapi_plot_id': fastapi_plot_id,
@@ -1262,7 +1253,7 @@ class PlotViewSet(viewsets.ModelViewSet):
                 'farms_count': len(farm_details)
             }
             plots_data.append(plot_data)
-        
+
         return Response({
             'count': len(plots_data),
             'results': plots_data

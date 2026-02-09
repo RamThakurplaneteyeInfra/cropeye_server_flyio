@@ -507,7 +507,14 @@ class CompleteFarmerRegistrationService:
                 plantation_date = None
         else:
             logger.info("No plantation_date provided in farm_data")
-        
+        # Sync CropType's plantation_date with Farm's plantation_date
+        if crop_type and plantation_date:
+           if crop_type.plantation_date != plantation_date:
+              crop_type.plantation_date = plantation_date
+              crop_type.save()
+              logger.info(f"Updated CropType '{crop_type.crop_type}' with plantation_date '{crop_type.plantation_date}' to match Farm")
+
+
         # Get crop_variety if provided
         crop_variety = farm_data.get('crop_variety', '').strip() if farm_data.get('crop_variety') else None
         if crop_variety == '':
@@ -516,6 +523,7 @@ class CompleteFarmerRegistrationService:
         # Get industry from field officer
         industry = get_user_industry(field_officer) if field_officer else None
         
+
         # Create farm
         farm = Farm.objects.create(
         address=farm_data['address'],
@@ -525,16 +533,14 @@ class CompleteFarmerRegistrationService:
         plot=plot,
         soil_type=soil_type,
         crop_type=crop_type,
-        plantation_date=plantation_date,
         spacing_a=farm_data.get('spacing_a'),
         spacing_b=farm_data.get('spacing_b'),
         crop_variety=crop_variety,
         industry=industry,
         
         # Add the rest of your fields
-        sugarcane_plantation_type=farm_data.get('sugarcane_plantation_type'),
-        sugarcane_planting_method=farm_data.get('sugarcane_planting_method'),
-        grapes_plantation_type=farm_data.get('grapes_plantation_type'),
+        plantation_date=plantation_date,
+
         variety_type=farm_data.get('variety_type'),
         variety_subtype=farm_data.get('variety_subtype'),
         variety_timing=farm_data.get('variety_timing'),
@@ -550,7 +556,7 @@ class CompleteFarmerRegistrationService:
     )
 
         
-        logger.info(f"Created farm: {farm.farm_uid} (ID: {farm.id}) for farmer {farmer.username} with plantation_date: {plantation_date}, crop_variety: {crop_variety}")
+        logger.info(f"Created farm: {farm.farm_uid} (ID: {farm.id}) for farmer {farmer.username} , crop_variety: {crop_variety}")
         return farm
     
     @staticmethod
