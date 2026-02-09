@@ -5,6 +5,74 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def column_exists(cursor, table, column):
+    cursor.execute(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = %s AND column_name = %s",
+        [table, column],
+    )
+    return cursor.fetchone() is not None
+
+
+def index_exists(cursor, index_name):
+    cursor.execute("SELECT 1 FROM pg_indexes WHERE indexname = %s", [index_name])
+    return cursor.fetchone() is not None
+
+
+def add_fields_if_missing(apps, schema_editor):
+    connection = schema_editor.connection
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        if not column_exists(cursor, "tasks_task", "assigned_to_id"):
+            cursor.execute(
+                "ALTER TABLE tasks_task ADD COLUMN assigned_to_id integer NULL "
+                "REFERENCES users_user(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "tasks_task", "created_by_id"):
+            cursor.execute(
+                "ALTER TABLE tasks_task ADD COLUMN created_by_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "tasks_task", "industry_id"):
+            cursor.execute(
+                "ALTER TABLE tasks_task ADD COLUMN industry_id bigint NULL "
+                "REFERENCES users_industry(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "tasks_taskattachment", "task_id"):
+            cursor.execute(
+                "ALTER TABLE tasks_taskattachment ADD COLUMN task_id bigint NOT NULL "
+                "REFERENCES tasks_task(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "tasks_taskattachment", "uploaded_by_id"):
+            cursor.execute(
+                "ALTER TABLE tasks_taskattachment ADD COLUMN uploaded_by_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "tasks_taskcomment", "task_id"):
+            cursor.execute(
+                "ALTER TABLE tasks_taskcomment ADD COLUMN task_id bigint NOT NULL "
+                "REFERENCES tasks_task(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "tasks_taskcomment", "user_id"):
+            cursor.execute(
+                "ALTER TABLE tasks_taskcomment ADD COLUMN user_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        for idx_name, col in [
+            ("tasks_task_status_4a0a95_idx", "status"),
+            ("tasks_task_priorit_a900d4_idx", "priority"),
+            ("tasks_task_assigne_ab55af_idx", "assigned_to_id"),
+            ("tasks_task_due_dat_bce847_idx", "due_date"),
+        ]:
+            if not index_exists(cursor, idx_name):
+                cursor.execute(
+                    "CREATE INDEX " + quote(idx_name) + " ON tasks_task (" + quote(col) + ")"
+                )
+
+
+def noop_reverse(apps, schema_editor):
+    pass
+
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -16,55 +84,62 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='task',
-            name='assigned_to',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='assigned_tasks', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='task',
-            name='created_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='created_tasks', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='task',
-            name='industry',
-            field=models.ForeignKey(blank=True, help_text='Industry this task belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='tasks', to='users.industry'),
-        ),
-        migrations.AddField(
-            model_name='taskattachment',
-            name='task',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attachments', to='tasks.task'),
-        ),
-        migrations.AddField(
-            model_name='taskattachment',
-            name='uploaded_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='taskcomment',
-            name='task',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='comments', to='tasks.task'),
-        ),
-        migrations.AddField(
-            model_name='taskcomment',
-            name='user',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddIndex(
-            model_name='task',
-            index=models.Index(fields=['status'], name='tasks_task_status_4a0a95_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='task',
-            index=models.Index(fields=['priority'], name='tasks_task_priorit_a900d4_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='task',
-            index=models.Index(fields=['assigned_to'], name='tasks_task_assigne_ab55af_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='task',
-            index=models.Index(fields=['due_date'], name='tasks_task_due_dat_bce847_idx'),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='task',
+                    name='assigned_to',
+                    field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='assigned_tasks', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='task',
+                    name='created_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='created_tasks', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='task',
+                    name='industry',
+                    field=models.ForeignKey(blank=True, help_text='Industry this task belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='tasks', to='users.industry'),
+                ),
+                migrations.AddField(
+                    model_name='taskattachment',
+                    name='task',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attachments', to='tasks.task'),
+                ),
+                migrations.AddField(
+                    model_name='taskattachment',
+                    name='uploaded_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='taskcomment',
+                    name='task',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='comments', to='tasks.task'),
+                ),
+                migrations.AddField(
+                    model_name='taskcomment',
+                    name='user',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddIndex(
+                    model_name='task',
+                    index=models.Index(fields=['status'], name='tasks_task_status_4a0a95_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='task',
+                    index=models.Index(fields=['priority'], name='tasks_task_priorit_a900d4_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='task',
+                    index=models.Index(fields=['assigned_to'], name='tasks_task_assigne_ab55af_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='task',
+                    index=models.Index(fields=['due_date'], name='tasks_task_due_dat_bce847_idx'),
+                ),
+            ],
+            database_operations=[
+                migrations.RunPython(add_fields_if_missing, noop_reverse),
+            ],
         ),
     ]

@@ -5,6 +5,72 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def column_exists(cursor, table, column):
+    cursor.execute(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = %s AND column_name = %s",
+        [table, column],
+    )
+    return cursor.fetchone() is not None
+
+
+def index_exists(cursor, index_name):
+    cursor.execute(
+        "SELECT 1 FROM pg_indexes WHERE indexname = %s",
+        [index_name],
+    )
+    return cursor.fetchone() is not None
+
+
+def add_fields_if_missing(apps, schema_editor):
+    """Add columns and indexes only if they don't exist (idempotent for existing DBs)."""
+    connection = schema_editor.connection
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        # Equipment fields
+        if not column_exists(cursor, "equipment_equipment", "assigned_to_id"):
+            cursor.execute(
+                "ALTER TABLE equipment_equipment ADD COLUMN assigned_to_id integer NULL "
+                "REFERENCES users_user(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+            )
+        # EquipmentUsage fields
+        if not column_exists(cursor, "equipment_equipmentusage", "equipment_id"):
+            cursor.execute(
+                "ALTER TABLE equipment_equipmentusage ADD COLUMN equipment_id bigint NOT NULL "
+                "REFERENCES equipment_equipment(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "equipment_equipmentusage", "user_id"):
+            cursor.execute(
+                "ALTER TABLE equipment_equipmentusage ADD COLUMN user_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        # MaintenanceRecord fields
+        if not column_exists(cursor, "equipment_maintenancerecord", "equipment_id"):
+            cursor.execute(
+                "ALTER TABLE equipment_maintenancerecord ADD COLUMN equipment_id bigint NOT NULL "
+                "REFERENCES equipment_equipment(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "equipment_maintenancerecord", "performed_by_id"):
+            cursor.execute(
+                "ALTER TABLE equipment_maintenancerecord ADD COLUMN performed_by_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+
+        # Indexes
+        for idx_name, col in [
+            ("equipment_e_status_fb8540_idx", "status"),
+            ("equipment_e_assigne_96ad0d_idx", "assigned_to_id"),
+            ("equipment_e_locatio_e2f5a2_idx", "location"),
+        ]:
+            if not index_exists(cursor, idx_name):
+                cursor.execute(
+                    "CREATE INDEX %s ON equipment_equipment (%s)" % (quote(idx_name), quote(col))
+                )
+
+
+def noop_reverse(apps, schema_editor):
+    pass
+
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -15,41 +81,48 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='equipment',
-            name='assigned_to',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='equipmentusage',
-            name='equipment',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='usage_records', to='equipment.equipment'),
-        ),
-        migrations.AddField(
-            model_name='equipmentusage',
-            name='user',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='maintenancerecord',
-            name='equipment',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='maintenance_records', to='equipment.equipment'),
-        ),
-        migrations.AddField(
-            model_name='maintenancerecord',
-            name='performed_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddIndex(
-            model_name='equipment',
-            index=models.Index(fields=['status'], name='equipment_e_status_fb8540_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='equipment',
-            index=models.Index(fields=['assigned_to'], name='equipment_e_assigne_96ad0d_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='equipment',
-            index=models.Index(fields=['location'], name='equipment_e_locatio_e2f5a2_idx'),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='equipment',
+                    name='assigned_to',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='equipmentusage',
+                    name='equipment',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='usage_records', to='equipment.equipment'),
+                ),
+                migrations.AddField(
+                    model_name='equipmentusage',
+                    name='user',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='maintenancerecord',
+                    name='equipment',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='maintenance_records', to='equipment.equipment'),
+                ),
+                migrations.AddField(
+                    model_name='maintenancerecord',
+                    name='performed_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddIndex(
+                    model_name='equipment',
+                    index=models.Index(fields=['status'], name='equipment_e_status_fb8540_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='equipment',
+                    index=models.Index(fields=['assigned_to'], name='equipment_e_assigne_96ad0d_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='equipment',
+                    index=models.Index(fields=['location'], name='equipment_e_locatio_e2f5a2_idx'),
+                ),
+            ],
+            database_operations=[
+                migrations.RunPython(add_fields_if_missing, noop_reverse),
+            ],
         ),
     ]

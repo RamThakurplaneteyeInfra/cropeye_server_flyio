@@ -5,6 +5,70 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def column_exists(cursor, table, column):
+    cursor.execute(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = %s AND column_name = %s",
+        [table, column],
+    )
+    return cursor.fetchone() is not None
+
+
+def index_exists(cursor, index_name):
+    cursor.execute("SELECT 1 FROM pg_indexes WHERE indexname = %s", [index_name])
+    return cursor.fetchone() is not None
+
+
+def add_fields_if_missing(apps, schema_editor):
+    connection = schema_editor.connection
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        if not column_exists(cursor, "inventory_inventoryitem", "created_by_id"):
+            cursor.execute(
+                "ALTER TABLE inventory_inventoryitem ADD COLUMN created_by_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "inventory_inventoryitem", "industry_id"):
+            cursor.execute(
+                "ALTER TABLE inventory_inventoryitem ADD COLUMN industry_id bigint NULL "
+                "REFERENCES users_industry(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "inventory_inventorytransaction", "inventory_item_id"):
+            cursor.execute(
+                "ALTER TABLE inventory_inventorytransaction ADD COLUMN inventory_item_id bigint NOT NULL "
+                "REFERENCES inventory_inventoryitem(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "inventory_inventorytransaction", "performed_by_id"):
+            cursor.execute(
+                "ALTER TABLE inventory_inventorytransaction ADD COLUMN performed_by_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "inventory_stock", "created_by_id"):
+            cursor.execute(
+                "ALTER TABLE inventory_stock ADD COLUMN created_by_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "inventory_stock", "industry_id"):
+            cursor.execute(
+                "ALTER TABLE inventory_stock ADD COLUMN industry_id bigint NULL "
+                "REFERENCES users_industry(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        for idx_name, table_name, cols in [
+            ("inventory_i_categor_fe6a79_idx", "inventory_inventoryitem", "category"),
+            ("inventory_i_status_77888d_idx", "inventory_inventoryitem", "status"),
+            ("inventory_s_item_ty_96d067_idx", "inventory_stock", "item_type"),
+            ("inventory_s_status_7ad998_idx", "inventory_stock", "status"),
+            ("inventory_s_item_na_35c454_idx", "inventory_stock", "item_name"),
+        ]:
+            if not index_exists(cursor, idx_name):
+                cursor.execute(
+                    "CREATE INDEX " + quote(idx_name) + " ON " + table_name + " (" + quote(cols) + ")"
+                )
+
+
+def noop_reverse(apps, schema_editor):
+    pass
+
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -16,54 +80,61 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='inventoryitem',
-            name='created_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='created_items', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='inventoryitem',
-            name='industry',
-            field=models.ForeignKey(blank=True, help_text='Industry this inventory item belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='inventory_items', to='users.industry'),
-        ),
-        migrations.AddField(
-            model_name='inventorytransaction',
-            name='inventory_item',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='transactions', to='inventory.inventoryitem'),
-        ),
-        migrations.AddField(
-            model_name='inventorytransaction',
-            name='performed_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='stock',
-            name='created_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='created_stocks', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='stock',
-            name='industry',
-            field=models.ForeignKey(blank=True, help_text='Industry this stock item belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='stocks', to='users.industry'),
-        ),
-        migrations.AddIndex(
-            model_name='inventoryitem',
-            index=models.Index(fields=['category'], name='inventory_i_categor_fe6a79_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='inventoryitem',
-            index=models.Index(fields=['status'], name='inventory_i_status_77888d_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='stock',
-            index=models.Index(fields=['item_type'], name='inventory_s_item_ty_96d067_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='stock',
-            index=models.Index(fields=['status'], name='inventory_s_status_7ad998_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='stock',
-            index=models.Index(fields=['item_name'], name='inventory_s_item_na_35c454_idx'),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='inventoryitem',
+                    name='created_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='created_items', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='inventoryitem',
+                    name='industry',
+                    field=models.ForeignKey(blank=True, help_text='Industry this inventory item belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='inventory_items', to='users.industry'),
+                ),
+                migrations.AddField(
+                    model_name='inventorytransaction',
+                    name='inventory_item',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='transactions', to='inventory.inventoryitem'),
+                ),
+                migrations.AddField(
+                    model_name='inventorytransaction',
+                    name='performed_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='stock',
+                    name='created_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='created_stocks', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='stock',
+                    name='industry',
+                    field=models.ForeignKey(blank=True, help_text='Industry this stock item belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='stocks', to='users.industry'),
+                ),
+                migrations.AddIndex(
+                    model_name='inventoryitem',
+                    index=models.Index(fields=['category'], name='inventory_i_categor_fe6a79_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='inventoryitem',
+                    index=models.Index(fields=['status'], name='inventory_i_status_77888d_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='stock',
+                    index=models.Index(fields=['item_type'], name='inventory_s_item_ty_96d067_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='stock',
+                    index=models.Index(fields=['status'], name='inventory_s_status_7ad998_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='stock',
+                    index=models.Index(fields=['item_name'], name='inventory_s_item_na_35c454_idx'),
+                ),
+            ],
+            database_operations=[
+                migrations.RunPython(add_fields_if_missing, noop_reverse),
+            ],
         ),
     ]

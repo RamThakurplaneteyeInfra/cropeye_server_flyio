@@ -5,6 +5,203 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def table_exists(cursor, table):
+    cursor.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_name = %s",
+        [table],
+    )
+    return cursor.fetchone() is not None
+
+
+def column_exists(cursor, table, column):
+    cursor.execute(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = %s AND column_name = %s",
+        [table, column],
+    )
+    return cursor.fetchone() is not None
+
+
+def index_exists(cursor, index_name):
+    cursor.execute("SELECT 1 FROM pg_indexes WHERE indexname = %s", [index_name])
+    return cursor.fetchone() is not None
+
+
+def unique_constraint_exists(cursor, table_name, constraint_name):
+    cursor.execute(
+        "SELECT 1 FROM pg_constraint c JOIN pg_class t ON c.conrelid = t.oid "
+        "WHERE t.relname = %s AND c.conname = %s AND c.contype = 'u'",
+        [table_name, constraint_name],
+    )
+    return cursor.fetchone() is not None
+
+
+def add_fields_if_missing(apps, schema_editor):
+    """Add columns, indexes, and unique constraints only if they don't exist."""
+    connection = schema_editor.connection
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        # CropType
+        if table_exists(cursor, "farms_croptype") and not column_exists(cursor, "farms_croptype", "industry_id"):
+            cursor.execute(
+                "ALTER TABLE farms_croptype ADD COLUMN industry_id bigint NULL "
+                "REFERENCES users_industry(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        # Farm
+        if table_exists(cursor, "farms_farm"):
+            if not column_exists(cursor, "farms_farm", "created_by_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farm ADD COLUMN created_by_id integer NULL "
+                    "REFERENCES users_user(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_farm", "crop_type_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farm ADD COLUMN crop_type_id bigint NULL "
+                    "REFERENCES farms_croptype(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_farm", "farm_owner_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farm ADD COLUMN farm_owner_id integer NOT NULL "
+                    "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_farm", "industry_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farm ADD COLUMN industry_id bigint NULL "
+                    "REFERENCES users_industry(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_farm", "plot_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farm ADD COLUMN plot_id bigint NULL "
+                    "REFERENCES farms_plot(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_farm", "soil_type_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farm ADD COLUMN soil_type_id bigint NULL "
+                    "REFERENCES farms_soiltype(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+                )
+        # FarmImage
+        if table_exists(cursor, "farms_farmimage"):
+            if not column_exists(cursor, "farms_farmimage", "farm_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farmimage ADD COLUMN farm_id bigint NOT NULL "
+                    "REFERENCES farms_farm(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_farmimage", "uploaded_by_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farmimage ADD COLUMN uploaded_by_id integer NOT NULL "
+                    "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+        # FarmIrrigation
+        if table_exists(cursor, "farms_farmirrigation"):
+            if not column_exists(cursor, "farms_farmirrigation", "farm_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farmirrigation ADD COLUMN farm_id bigint NOT NULL "
+                    "REFERENCES farms_farm(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_farmirrigation", "irrigation_type_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farmirrigation ADD COLUMN irrigation_type_id bigint NULL "
+                    "REFERENCES farms_irrigationtype(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+                )
+        # FarmSensor
+        if table_exists(cursor, "farms_farmsensor"):
+            if not column_exists(cursor, "farms_farmsensor", "farm_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farmsensor ADD COLUMN farm_id bigint NOT NULL "
+                    "REFERENCES farms_farm(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_farmsensor", "sensor_type_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_farmsensor ADD COLUMN sensor_type_id bigint NULL "
+                    "REFERENCES farms_sensortype(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+                )
+        # GrapseReport (skip if table missing, e.g. different migration state)
+        if table_exists(cursor, "farms_grapsereport"):
+            if not column_exists(cursor, "farms_grapsereport", "field_officer_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_grapsereport ADD COLUMN field_officer_id integer NULL "
+                    "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_grapsereport", "uploaded_by_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_grapsereport ADD COLUMN uploaded_by_id integer NOT NULL "
+                    "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_grapsereport", "plot_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_grapsereport ADD COLUMN plot_id bigint NOT NULL "
+                    "REFERENCES farms_plot(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+        # PlantationType
+        if table_exists(cursor, "farms_plantationtype"):
+            if not column_exists(cursor, "farms_plantationtype", "crop_type_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_plantationtype ADD COLUMN crop_type_id bigint NULL "
+                    "REFERENCES farms_croptype(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_plantationtype", "industry_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_plantationtype ADD COLUMN industry_id bigint NULL "
+                    "REFERENCES users_industry(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+        # PlantingMethod
+        if table_exists(cursor, "farms_plantingmethod"):
+            if not column_exists(cursor, "farms_plantingmethod", "industry_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_plantingmethod ADD COLUMN industry_id bigint NULL "
+                    "REFERENCES users_industry(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_plantingmethod", "plantation_type_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_plantingmethod ADD COLUMN plantation_type_id bigint NULL "
+                    "REFERENCES farms_plantationtype(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+        # Plot
+        if table_exists(cursor, "farms_plot"):
+            if not column_exists(cursor, "farms_plot", "created_by_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_plot ADD COLUMN created_by_id integer NULL "
+                    "REFERENCES users_user(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_plot", "farmer_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_plot ADD COLUMN farmer_id integer NULL "
+                    "REFERENCES users_user(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+                )
+            if not column_exists(cursor, "farms_plot", "industry_id"):
+                cursor.execute(
+                    "ALTER TABLE farms_plot ADD COLUMN industry_id bigint NULL "
+                    "REFERENCES users_industry(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+
+        # Index
+        if table_exists(cursor, "farms_plot") and not index_exists(cursor, "farms_plot_gat_num_653494_idx"):
+            cursor.execute(
+                "CREATE INDEX " + quote("farms_plot_gat_num_653494_idx") + " ON farms_plot (gat_number, plot_number)"
+            )
+
+        # Unique constraints (only add if table and constraint missing)
+        if table_exists(cursor, "farms_plantationtype") and not unique_constraint_exists(cursor, "farms_plantationtype", "farms_plantationtype_ut"):
+            cursor.execute(
+                "ALTER TABLE farms_plantationtype ADD CONSTRAINT farms_plantationtype_ut "
+                "UNIQUE (crop_type_id, industry_id, code)"
+            )
+        if table_exists(cursor, "farms_plantingmethod") and not unique_constraint_exists(cursor, "farms_plantingmethod", "farms_plantingmethod_ut"):
+            cursor.execute(
+                "ALTER TABLE farms_plantingmethod ADD CONSTRAINT farms_plantingmethod_ut "
+                "UNIQUE (plantation_type_id, industry_id, code)"
+            )
+        if table_exists(cursor, "farms_plot") and not unique_constraint_exists(cursor, "farms_plot", "farms_plot_ut"):
+            cursor.execute(
+                "ALTER TABLE farms_plot ADD CONSTRAINT farms_plot_ut "
+                "UNIQUE (gat_number, plot_number, village, taluka, district)"
+            )
+    # Note: farm_owner_id NOT NULL may fail if farms_farm has rows; 0001 creates empty tables so OK.
+
+
+def noop_reverse(apps, schema_editor):
+    pass
+
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -16,135 +213,142 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='croptype',
-            name='industry',
-            field=models.ForeignKey(blank=True, help_text='Industry this crop type belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='crop_types', to='users.industry'),
-        ),
-        migrations.AddField(
-            model_name='farm',
-            name='created_by',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='created_farms', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='farm',
-            name='crop_type',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='farms.croptype'),
-        ),
-        migrations.AddField(
-            model_name='farm',
-            name='farm_owner',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='farms', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='farm',
-            name='industry',
-            field=models.ForeignKey(blank=True, help_text='Industry this farm belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='farms', to='users.industry'),
-        ),
-        migrations.AddField(
-            model_name='farmimage',
-            name='farm',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='images', to='farms.farm'),
-        ),
-        migrations.AddField(
-            model_name='farmimage',
-            name='uploaded_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='farm_images', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='farmirrigation',
-            name='farm',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='irrigations', to='farms.farm'),
-        ),
-        migrations.AddField(
-            model_name='farmsensor',
-            name='farm',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='sensors', to='farms.farm'),
-        ),
-        migrations.AddField(
-            model_name='grapsereport',
-            name='field_officer',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='field_officer_files', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='grapsereport',
-            name='uploaded_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='uploaded_files', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='farmirrigation',
-            name='irrigation_type',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='farms.irrigationtype'),
-        ),
-        migrations.AddField(
-            model_name='plantationtype',
-            name='crop_type',
-            field=models.ForeignKey(blank=True, help_text='Crop type this plantation type belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='plantation_types', to='farms.croptype'),
-        ),
-        migrations.AddField(
-            model_name='plantationtype',
-            name='industry',
-            field=models.ForeignKey(blank=True, help_text='Industry this plantation type belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='plantation_types', to='users.industry'),
-        ),
-        migrations.AddField(
-            model_name='plantingmethod',
-            name='industry',
-            field=models.ForeignKey(blank=True, help_text='Industry this planting method belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='planting_methods', to='users.industry'),
-        ),
-        migrations.AddField(
-            model_name='plantingmethod',
-            name='plantation_type',
-            field=models.ForeignKey(blank=True, help_text='Plantation type this planting method belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='planting_methods', to='farms.plantationtype'),
-        ),
-        migrations.AddField(
-            model_name='plot',
-            name='created_by',
-            field=models.ForeignKey(blank=True, help_text='Field officer who created this plot', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='created_plots', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='plot',
-            name='farmer',
-            field=models.ForeignKey(blank=True, help_text='Farmer who owns this plot', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='plots', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='plot',
-            name='industry',
-            field=models.ForeignKey(blank=True, help_text='Industry this plot belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='plots', to='users.industry'),
-        ),
-        migrations.AddField(
-            model_name='grapsereport',
-            name='plot',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='files', to='farms.plot'),
-        ),
-        migrations.AddField(
-            model_name='farm',
-            name='plot',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='farms', to='farms.plot'),
-        ),
-        migrations.AddField(
-            model_name='farmsensor',
-            name='sensor_type',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='farms.sensortype'),
-        ),
-        migrations.AddField(
-            model_name='farm',
-            name='soil_type',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='farms.soiltype'),
-        ),
-        migrations.AlterUniqueTogether(
-            name='plantationtype',
-            unique_together={('crop_type', 'industry', 'code')},
-        ),
-        migrations.AlterUniqueTogether(
-            name='plantingmethod',
-            unique_together={('plantation_type', 'industry', 'code')},
-        ),
-        migrations.AddIndex(
-            model_name='plot',
-            index=models.Index(fields=['gat_number', 'plot_number'], name='farms_plot_gat_num_653494_idx'),
-        ),
-        migrations.AlterUniqueTogether(
-            name='plot',
-            unique_together={('gat_number', 'plot_number', 'village', 'taluka', 'district')},
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='croptype',
+                    name='industry',
+                    field=models.ForeignKey(blank=True, help_text='Industry this crop type belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='crop_types', to='users.industry'),
+                ),
+                migrations.AddField(
+                    model_name='farm',
+                    name='created_by',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='created_farms', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='farm',
+                    name='crop_type',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='farms.croptype'),
+                ),
+                migrations.AddField(
+                    model_name='farm',
+                    name='farm_owner',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='farms', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='farm',
+                    name='industry',
+                    field=models.ForeignKey(blank=True, help_text='Industry this farm belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='farms', to='users.industry'),
+                ),
+                migrations.AddField(
+                    model_name='farmimage',
+                    name='farm',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='images', to='farms.farm'),
+                ),
+                migrations.AddField(
+                    model_name='farmimage',
+                    name='uploaded_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='farm_images', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='farmirrigation',
+                    name='farm',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='irrigations', to='farms.farm'),
+                ),
+                migrations.AddField(
+                    model_name='farmsensor',
+                    name='farm',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='sensors', to='farms.farm'),
+                ),
+                migrations.AddField(
+                    model_name='grapsereport',
+                    name='field_officer',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='field_officer_files', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='grapsereport',
+                    name='uploaded_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='uploaded_files', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='farmirrigation',
+                    name='irrigation_type',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='farms.irrigationtype'),
+                ),
+                migrations.AddField(
+                    model_name='plantationtype',
+                    name='crop_type',
+                    field=models.ForeignKey(blank=True, help_text='Crop type this plantation type belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='plantation_types', to='farms.croptype'),
+                ),
+                migrations.AddField(
+                    model_name='plantationtype',
+                    name='industry',
+                    field=models.ForeignKey(blank=True, help_text='Industry this plantation type belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='plantation_types', to='users.industry'),
+                ),
+                migrations.AddField(
+                    model_name='plantingmethod',
+                    name='industry',
+                    field=models.ForeignKey(blank=True, help_text='Industry this planting method belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='planting_methods', to='users.industry'),
+                ),
+                migrations.AddField(
+                    model_name='plantingmethod',
+                    name='plantation_type',
+                    field=models.ForeignKey(blank=True, help_text='Plantation type this planting method belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='planting_methods', to='farms.plantationtype'),
+                ),
+                migrations.AddField(
+                    model_name='plot',
+                    name='created_by',
+                    field=models.ForeignKey(blank=True, help_text='Field officer who created this plot', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='created_plots', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='plot',
+                    name='farmer',
+                    field=models.ForeignKey(blank=True, help_text='Farmer who owns this plot', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='plots', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='plot',
+                    name='industry',
+                    field=models.ForeignKey(blank=True, help_text='Industry this plot belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='plots', to='users.industry'),
+                ),
+                migrations.AddField(
+                    model_name='grapsereport',
+                    name='plot',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='files', to='farms.plot'),
+                ),
+                migrations.AddField(
+                    model_name='farm',
+                    name='plot',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='farms', to='farms.plot'),
+                ),
+                migrations.AddField(
+                    model_name='farmsensor',
+                    name='sensor_type',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='farms.sensortype'),
+                ),
+                migrations.AddField(
+                    model_name='farm',
+                    name='soil_type',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='farms.soiltype'),
+                ),
+                migrations.AlterUniqueTogether(
+                    name='plantationtype',
+                    unique_together={('crop_type', 'industry', 'code')},
+                ),
+                migrations.AlterUniqueTogether(
+                    name='plantingmethod',
+                    unique_together={('plantation_type', 'industry', 'code')},
+                ),
+                migrations.AddIndex(
+                    model_name='plot',
+                    index=models.Index(fields=['gat_number', 'plot_number'], name='farms_plot_gat_num_653494_idx'),
+                ),
+                migrations.AlterUniqueTogether(
+                    name='plot',
+                    unique_together={('gat_number', 'plot_number', 'village', 'taluka', 'district')},
+                ),
+            ],
+            database_operations=[
+                migrations.RunPython(add_fields_if_missing, noop_reverse),
+            ],
         ),
     ]

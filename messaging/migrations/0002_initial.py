@@ -5,6 +5,88 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def column_exists(cursor, table, column):
+    cursor.execute(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = %s AND column_name = %s",
+        [table, column],
+    )
+    return cursor.fetchone() is not None
+
+
+def index_exists(cursor, index_name):
+    cursor.execute("SELECT 1 FROM pg_indexes WHERE indexname = %s", [index_name])
+    return cursor.fetchone() is not None
+
+
+def unique_constraint_exists(cursor, table_name, constraint_name):
+    cursor.execute(
+        "SELECT 1 FROM pg_constraint c JOIN pg_class t ON c.conrelid = t.oid "
+        "WHERE t.relname = %s AND c.conname = %s AND c.contype = 'u'",
+        [table_name, constraint_name],
+    )
+    return cursor.fetchone() is not None
+
+
+def add_fields_if_missing(apps, schema_editor):
+    connection = schema_editor.connection
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        if not column_exists(cursor, "messaging_conversation", "participant1_id"):
+            cursor.execute(
+                "ALTER TABLE messaging_conversation ADD COLUMN participant1_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "messaging_conversation", "participant2_id"):
+            cursor.execute(
+                "ALTER TABLE messaging_conversation ADD COLUMN participant2_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "messaging_message", "conversation_id"):
+            cursor.execute(
+                "ALTER TABLE messaging_message ADD COLUMN conversation_id bigint NOT NULL "
+                "REFERENCES messaging_conversation(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "messaging_message", "sender_id"):
+            cursor.execute(
+                "ALTER TABLE messaging_message ADD COLUMN sender_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not index_exists(cursor, "messaging_c_partici_5222f4_idx"):
+            cursor.execute(
+                "CREATE INDEX " + quote("messaging_c_partici_5222f4_idx")
+                + " ON messaging_conversation (participant1_id, participant2_id)"
+            )
+        if not index_exists(cursor, "messaging_c_last_me_3f31f1_idx"):
+            cursor.execute(
+                "CREATE INDEX " + quote("messaging_c_last_me_3f31f1_idx")
+                + " ON messaging_conversation (last_message_at DESC)"
+            )
+        if not index_exists(cursor, "messaging_m_convers_7bc91b_idx"):
+            cursor.execute(
+                "CREATE INDEX " + quote("messaging_m_convers_7bc91b_idx")
+                + " ON messaging_message (conversation_id, created_at)"
+            )
+        if not index_exists(cursor, "messaging_m_sender__277197_idx"):
+            cursor.execute(
+                "CREATE INDEX " + quote("messaging_m_sender__277197_idx")
+                + " ON messaging_message (sender_id, created_at)"
+            )
+        if not index_exists(cursor, "messaging_m_read_at_f7d225_idx"):
+            cursor.execute(
+                "CREATE INDEX " + quote("messaging_m_read_at_f7d225_idx")
+                + " ON messaging_message (read_at)"
+            )
+        if not unique_constraint_exists(cursor, "messaging_conversation", "messaging_conversation_ut"):
+            cursor.execute(
+                "ALTER TABLE messaging_conversation ADD CONSTRAINT messaging_conversation_ut "
+                "UNIQUE (participant1_id, participant2_id)"
+            )
+
+
+def noop_reverse(apps, schema_editor):
+    pass
+
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -15,48 +97,55 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='conversation',
-            name='participant1',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations_as_participant1', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='conversation',
-            name='participant2',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations_as_participant2', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='message',
-            name='conversation',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='messages', to='messaging.conversation'),
-        ),
-        migrations.AddField(
-            model_name='message',
-            name='sender',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='sent_messages', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddIndex(
-            model_name='conversation',
-            index=models.Index(fields=['participant1', 'participant2'], name='messaging_c_partici_5222f4_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='conversation',
-            index=models.Index(fields=['-last_message_at'], name='messaging_c_last_me_3f31f1_idx'),
-        ),
-        migrations.AlterUniqueTogether(
-            name='conversation',
-            unique_together={('participant1', 'participant2')},
-        ),
-        migrations.AddIndex(
-            model_name='message',
-            index=models.Index(fields=['conversation', 'created_at'], name='messaging_m_convers_7bc91b_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='message',
-            index=models.Index(fields=['sender', 'created_at'], name='messaging_m_sender__277197_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='message',
-            index=models.Index(fields=['read_at'], name='messaging_m_read_at_f7d225_idx'),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='conversation',
+                    name='participant1',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations_as_participant1', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='conversation',
+                    name='participant2',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations_as_participant2', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='message',
+                    name='conversation',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='messages', to='messaging.conversation'),
+                ),
+                migrations.AddField(
+                    model_name='message',
+                    name='sender',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='sent_messages', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddIndex(
+                    model_name='conversation',
+                    index=models.Index(fields=['participant1', 'participant2'], name='messaging_c_partici_5222f4_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='conversation',
+                    index=models.Index(fields=['-last_message_at'], name='messaging_c_last_me_3f31f1_idx'),
+                ),
+                migrations.AlterUniqueTogether(
+                    name='conversation',
+                    unique_together={('participant1', 'participant2')},
+                ),
+                migrations.AddIndex(
+                    model_name='message',
+                    index=models.Index(fields=['conversation', 'created_at'], name='messaging_m_convers_7bc91b_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='message',
+                    index=models.Index(fields=['sender', 'created_at'], name='messaging_m_sender__277197_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='message',
+                    index=models.Index(fields=['read_at'], name='messaging_m_read_at_f7d225_idx'),
+                ),
+            ],
+            database_operations=[
+                migrations.RunPython(add_fields_if_missing, noop_reverse),
+            ],
         ),
     ]
