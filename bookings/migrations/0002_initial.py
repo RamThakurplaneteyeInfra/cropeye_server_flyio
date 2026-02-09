@@ -5,6 +5,88 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def column_exists(cursor, table, column):
+    cursor.execute(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = %s AND column_name = %s",
+        [table, column],
+    )
+    return cursor.fetchone() is not None
+
+
+def index_exists(cursor, index_name):
+    cursor.execute(
+        "SELECT 1 FROM pg_indexes WHERE indexname = %s",
+        [index_name],
+    )
+    return cursor.fetchone() is not None
+
+
+def add_fields_if_missing(apps, schema_editor):
+    """Add columns and indexes only if they don't exist (idempotent for existing DBs)."""
+    connection = schema_editor.connection
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        # Booking fields
+        if not column_exists(cursor, "bookings_booking", "approved_by_id"):
+            cursor.execute(
+                "ALTER TABLE bookings_booking ADD COLUMN approved_by_id integer NULL "
+                "REFERENCES users_user(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "bookings_booking", "created_by_id"):
+            cursor.execute(
+                "ALTER TABLE bookings_booking ADD COLUMN created_by_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "bookings_booking", "industry_id"):
+            cursor.execute(
+                "ALTER TABLE bookings_booking ADD COLUMN industry_id bigint NULL "
+                "REFERENCES users_industry(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "bookings_booking", "user_role_id"):
+            cursor.execute(
+                "ALTER TABLE bookings_booking ADD COLUMN user_role_id bigint NULL "
+                "REFERENCES users_role(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+            )
+        # BookingAttachment fields
+        if not column_exists(cursor, "bookings_bookingattachment", "booking_id"):
+            cursor.execute(
+                "ALTER TABLE bookings_bookingattachment ADD COLUMN booking_id bigint NOT NULL "
+                "REFERENCES bookings_booking(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "bookings_bookingattachment", "uploaded_by_id"):
+            cursor.execute(
+                "ALTER TABLE bookings_bookingattachment ADD COLUMN uploaded_by_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        # BookingComment fields
+        if not column_exists(cursor, "bookings_bookingcomment", "booking_id"):
+            cursor.execute(
+                "ALTER TABLE bookings_bookingcomment ADD COLUMN booking_id bigint NOT NULL "
+                "REFERENCES bookings_booking(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+        if not column_exists(cursor, "bookings_bookingcomment", "user_id"):
+            cursor.execute(
+                "ALTER TABLE bookings_bookingcomment ADD COLUMN user_id integer NOT NULL "
+                "REFERENCES users_user(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+            )
+
+        # Indexes
+        for idx_name, col in [
+            ("bookings_bo_status_233e96_idx", "status"),
+            ("bookings_bo_booking_3ec655_idx", "booking_type"),
+            ("bookings_bo_start_d_3e8155_idx", "start_date"),
+            ("bookings_bo_end_dat_f79cb7_idx", "end_date"),
+        ]:
+            if not index_exists(cursor, idx_name):
+                cursor.execute(
+                    "CREATE INDEX %s ON bookings_booking (%s)" % (quote(idx_name), quote(col))
+                )
+
+
+def noop_reverse(apps, schema_editor):
+    pass
+
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -16,60 +98,67 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='booking',
-            name='approved_by',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='approved_bookings', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='booking',
-            name='created_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='created_bookings', to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='booking',
-            name='industry',
-            field=models.ForeignKey(blank=True, help_text='Industry this booking belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='bookings', to='users.industry'),
-        ),
-        migrations.AddField(
-            model_name='booking',
-            name='user_role',
-            field=models.ForeignKey(blank=True, help_text='Role assigned to this booking', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='bookings', to='users.role', verbose_name='User Role'),
-        ),
-        migrations.AddField(
-            model_name='bookingattachment',
-            name='booking',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attachments', to='bookings.booking'),
-        ),
-        migrations.AddField(
-            model_name='bookingattachment',
-            name='uploaded_by',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddField(
-            model_name='bookingcomment',
-            name='booking',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='comments', to='bookings.booking'),
-        ),
-        migrations.AddField(
-            model_name='bookingcomment',
-            name='user',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
-        ),
-        migrations.AddIndex(
-            model_name='booking',
-            index=models.Index(fields=['status'], name='bookings_bo_status_233e96_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='booking',
-            index=models.Index(fields=['booking_type'], name='bookings_bo_booking_3ec655_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='booking',
-            index=models.Index(fields=['start_date'], name='bookings_bo_start_d_3e8155_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='booking',
-            index=models.Index(fields=['end_date'], name='bookings_bo_end_dat_f79cb7_idx'),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='booking',
+                    name='approved_by',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='approved_bookings', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='booking',
+                    name='created_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='created_bookings', to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='booking',
+                    name='industry',
+                    field=models.ForeignKey(blank=True, help_text='Industry this booking belongs to', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='bookings', to='users.industry'),
+                ),
+                migrations.AddField(
+                    model_name='booking',
+                    name='user_role',
+                    field=models.ForeignKey(blank=True, help_text='Role assigned to this booking', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='bookings', to='users.role', verbose_name='User Role'),
+                ),
+                migrations.AddField(
+                    model_name='bookingattachment',
+                    name='booking',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attachments', to='bookings.booking'),
+                ),
+                migrations.AddField(
+                    model_name='bookingattachment',
+                    name='uploaded_by',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddField(
+                    model_name='bookingcomment',
+                    name='booking',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='comments', to='bookings.booking'),
+                ),
+                migrations.AddField(
+                    model_name='bookingcomment',
+                    name='user',
+                    field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+                ),
+                migrations.AddIndex(
+                    model_name='booking',
+                    index=models.Index(fields=['status'], name='bookings_bo_status_233e96_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='booking',
+                    index=models.Index(fields=['booking_type'], name='bookings_bo_booking_3ec655_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='booking',
+                    index=models.Index(fields=['start_date'], name='bookings_bo_start_d_3e8155_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='booking',
+                    index=models.Index(fields=['end_date'], name='bookings_bo_end_dat_f79cb7_idx'),
+                ),
+            ],
+            database_operations=[
+                migrations.RunPython(add_fields_if_missing, noop_reverse),
+            ],
         ),
     ]
