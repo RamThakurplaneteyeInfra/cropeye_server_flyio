@@ -167,8 +167,10 @@ def _parse_database_url(url: str) -> dict:
         'DISABLE_SERVER_SIDE_CURSORS': True,  # Required for Neon/pgBouncer connection pooling
     }
 
-_database_url = os.environ.get('DATABASE_URL')
-if _database_url and _database_url.strip().startswith('postgresql'):
+_database_url = (os.environ.get('DATABASE_URL') or '').strip()
+if _database_url and (_database_url.startswith('postgresql://') or _database_url.startswith('postgres://')):
+    if _database_url.startswith('postgres://'):
+        _database_url = 'postgresql://' + _database_url[9:]
     DATABASES = {'default': _parse_database_url(_database_url)}
 else:
     DATABASES = {

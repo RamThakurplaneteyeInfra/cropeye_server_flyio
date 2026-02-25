@@ -21,10 +21,12 @@ import psycopg2
 
 
 def main():
-    url = os.environ.get('DATABASE_URL')
-    if not url or not url.startswith('postgresql'):
-        print('DATABASE_URL (postgresql://...) not set in environment. Skipping PostGIS setup.')
+    url = (os.environ.get('DATABASE_URL') or '').strip()
+    if not url or (not url.startswith('postgresql://') and not url.startswith('postgres://')):
+        print('DATABASE_URL (postgresql:// or postgres://) not set in environment. Skipping PostGIS setup.')
         return 0
+    if url.startswith('postgres://'):
+        url = 'postgresql://' + url[9:]
 
     print('Enabling PostGIS extension on database...')
     try:
