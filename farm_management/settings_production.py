@@ -1,14 +1,12 @@
 import os
 from pathlib import Path
-from urllib.parse import urlparse, unquote
 from dotenv import load_dotenv
 from datetime import timedelta
 
-# Load environment variables
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Load .env from project root so DB_HOST, DB_NAME, etc. are set when running in Docker
+load_dotenv(BASE_DIR / '.env')
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-this-in-production')
@@ -119,39 +117,26 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'farm_management.wsgi.application'
 
-# Database
-def _parse_database_url(url: str) -> dict:
-    """Parse PostgreSQL DATABASE_URL into Django DATABASES config."""
-    p = urlparse(url)
-    opts = {'sslmode': 'require'} if 'sslmode=require' in (p.query or '') else {}
-    return {
-        'ENGINE': 'django.contrib.gis.db.backends.postgis',
-        'NAME': (p.path or '/').lstrip('/') or 'neondb',
-        'USER': unquote(p.username) if p.username else '',
-        'PASSWORD': unquote(p.password) if p.password else '',
-        'HOST': p.hostname or 'localhost',
-        'PORT': str(p.port) if p.port else '5432',
-        'OPTIONS': opts,
-        'DISABLE_SERVER_SIDE_CURSORS': True,  # Required for Neon/pgBouncer connection pooling
-    }
+# Database - explicit DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD only (no DATABASE_URL, no localhost fallback)
+_db_host = (os.environ.get('DB_HOST') or '').strip()
+if not _db_host:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        'DB_HOST is required in production. Set DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD in .env (e.g. Railway).'
+    )
 
-_database_url = (os.environ.get('DATABASE_URL') or '').strip()
-if _database_url and (_database_url.startswith('postgresql://') or _database_url.startswith('postgres://')):
-    if _database_url.startswith('postgres://'):
-        _database_url = 'postgresql://' + _database_url[9:]
-    DATABASES = {'default': _parse_database_url(_database_url)}
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.contrib.gis.db.backends.postgis',
-            'NAME': os.environ.get('DB_NAME', 'farm_management'),
-            'USER': os.environ.get('DB_USER', 'postgres'),
-            'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
-            'HOST': os.environ.get('DB_HOST', 'localhost'),
-            'PORT': os.environ.get('DB_PORT', '5432'),
-            'DISABLE_SERVER_SIDE_CURSORS': True,
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
+        'NAME': (os.environ.get('DB_NAME') or '').strip() or 'railway',
+        'USER': (os.environ.get('DB_USER') or '').strip() or 'postgres',
+        'PASSWORD': (os.environ.get('DB_PASSWORD') or ''),
+        'HOST': _db_host,
+        'PORT': (os.environ.get('DB_PORT') or '').strip() or '5432',
+        'OPTIONS': {'sslmode': 'require'},
+        'DISABLE_SERVER_SIDE_CURSORS': True,
     }
+}
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [

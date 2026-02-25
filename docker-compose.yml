@@ -32,7 +32,7 @@ services:
     env_file:
       - .env
     environment:
-      # DATABASE_URL from .env is used for Neon; set here to override if needed
+      # DATABASE_URL from .env is used for Railway Postgres (PostGIS); set here to override if needed
       - ALLOWED_HOSTS=*
       - DEBUG=True
     # Removed depends_on since we're using hosted database, not local db service

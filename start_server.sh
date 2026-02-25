@@ -1,14 +1,14 @@
 #!/bin/sh
 # Wrapper script to start Gunicorn and filter health check logs
-# Supports Render (DB_HOST), Fly.io + Neon (DATABASE_URL), and local Docker.
+# Supports hosted Postgres via DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD (e.g. Railway).
 
 echo '🚀 Starting Django application...'
 mkdir -p /app/logs
 
-# When using DATABASE_URL (Neon, Render, Fly.io): skip nc wait and fix_phone (external DB)
-if [ -n "$DATABASE_URL" ] && [ "$DATABASE_URL" != "" ]; then
-  echo '✅ Using DATABASE_URL (Neon/external). Skipping DB wait and fix_phone.'
-  echo '🗺️  Ensuring PostGIS extension (Neon)...'
+# When using hosted DB (DB_HOST set): skip nc wait and fix_phone
+if [ -n "$DB_HOST" ] && [ "$DB_HOST" != "" ]; then
+  echo '✅ Using DB_HOST (Railway/external). Skipping DB wait and fix_phone.'
+  echo '🗺️  Ensuring PostGIS extension...'
   python enable_postgis_neon.py || echo '⚠️  PostGIS setup skipped or failed, continuing...'
 else
   echo '⏳ Waiting for database connection...'

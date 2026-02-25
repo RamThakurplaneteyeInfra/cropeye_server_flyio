@@ -6,9 +6,9 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-# Use production settings (Neon DB) when DATABASE_URL is set; otherwise development
-_db_url = os.environ.get('DATABASE_URL', '')
-if _db_url and _db_url.strip().startswith('postgresql'):
+# Use production settings when DB_HOST is set (hosted DB); otherwise development
+_db_host = (os.environ.get('DB_HOST') or '').strip()
+if _db_host:
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'farm_management.settings_production')
 else:
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'farm_management.settings')

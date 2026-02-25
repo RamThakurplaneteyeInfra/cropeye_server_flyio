@@ -149,28 +149,47 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'farm_management.wsgi.application'
 
-# Database - use DATABASE_URL (Neon) when set, otherwise local DB
+# Database - use DATABASE_URL (Railway/external) when set, otherwise local DB
 from urllib.parse import urlparse, unquote
+
+
+def _normalize_database_url(url: str) -> str:
+    """Ensure DATABASE_URL uses postgresql:// so urlparse gives correct host/path."""
+    url = (url or '').strip()
+    if url.startswith('postgresql://'):
+        return url
+    if url.startswith('postgres://'):
+        return 'postgresql://' + url[10:]  # 10 = len('postgres://')
+    if url.startswith('postgresql:'):
+        return 'postgresql://' + url[11:]  # missing // after scheme
+    if url.startswith('postgres:'):
+        return 'postgresql://' + url[8:]   # e.g. postgres:user:pass@host/db
+    return url
+
 
 def _parse_database_url(url: str) -> dict:
     """Parse PostgreSQL DATABASE_URL into Django DATABASES config."""
+    url = _normalize_database_url(url)
     p = urlparse(url)
+    # DB name: use path only (last segment), max 63 chars (PostgreSQL limit)
+    raw_path = (p.path or '/').strip('/')
+    name = (raw_path.split('/')[-1] if raw_path else '') or 'postgres'
+    name = name[:63]
     opts = {'sslmode': 'require'} if 'sslmode=require' in (p.query or '') else {}
     return {
         'ENGINE': 'django.contrib.gis.db.backends.postgis',
-        'NAME': (p.path or '/').lstrip('/') or 'neondb',
+        'NAME': name,
         'USER': unquote(p.username) if p.username else '',
         'PASSWORD': unquote(p.password) if p.password else '',
         'HOST': p.hostname or 'localhost',
         'PORT': str(p.port) if p.port else '5432',
         'OPTIONS': opts,
-        'DISABLE_SERVER_SIDE_CURSORS': True,  # Required for Neon/pgBouncer connection pooling
+        'DISABLE_SERVER_SIDE_CURSORS': True,  # Required for Railway/external connection pooling
     }
 
 _database_url = (os.environ.get('DATABASE_URL') or '').strip()
-if _database_url and (_database_url.startswith('postgresql://') or _database_url.startswith('postgres://')):
-    if _database_url.startswith('postgres://'):
-        _database_url = 'postgresql://' + _database_url[9:]
+if _database_url and (_database_url.startswith('postgresql') or _database_url.startswith('postgres')):
+    _database_url = _normalize_database_url(_database_url)
     DATABASES = {'default': _parse_database_url(_database_url)}
 else:
     DATABASES = {
