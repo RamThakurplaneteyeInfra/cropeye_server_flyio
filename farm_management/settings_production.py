@@ -16,6 +16,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-this-in-produc
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
+
 # ALLOWED_HOSTS - Use '*' in production (Render/Fly reverse-proxy deployments)
 # Render and Fly terminate TLS and forward Host; exact hostnames vary. Restricting
 # causes DisallowedHost. Restrict via ALLOWED_HOSTS env only if you run without a proxy.
@@ -69,6 +70,7 @@ INSTALLED_APPS = [
     'drf_yasg',
     'django_filters',
     'leaflet',
+    'django_prometheus',
     
     # Local apps
     'users',
@@ -84,6 +86,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # For static files in production
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -93,6 +96,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
 
 ROOT_URLCONF = 'farm_management.urls'

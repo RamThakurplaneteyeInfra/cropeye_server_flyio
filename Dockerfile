@@ -32,7 +32,8 @@ ENV GEOS_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgeos_c.so
 
 # Install Python dependencies
 COPY requirements_production.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir django-prometheus==2.3.1 prometheus-client==0.20.0 \
+    && pip install --no-cache-dir -r requirements.txt
 
 # Copy project
 COPY . /app/
