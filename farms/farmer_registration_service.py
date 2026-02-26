@@ -116,7 +116,11 @@ class CompleteFarmerRegistrationService:
                         farm_data['spacing_a'] = data['farm']['spacing_a']
                     if not farm_data.get('spacing_b') and data.get('farm', {}).get('spacing_b'):
                         farm_data['spacing_b'] = data['farm']['spacing_b']
-                    
+                    if not farm_data.get('sugarcane_type') and data.get('farm', {}).get('sugarcane_type'):
+                        farm_data['sugarcane_type'] = data['farm']['sugarcane_type']
+                    if farm_data.get('sugarcane_yield') is None and data.get('farm', {}).get('sugarcane_yield') is not None:
+                        farm_data['sugarcane_yield'] = data['farm']['sugarcane_yield']
+
                     farm = CompleteFarmerRegistrationService._create_farm(
                         farm_data, farmer, field_officer, plot
                     )
@@ -519,7 +523,20 @@ class CompleteFarmerRegistrationService:
         crop_variety = farm_data.get('crop_variety', '').strip() if farm_data.get('crop_variety') else None
         if crop_variety == '':
             crop_variety = None
-        
+
+        # Sugarcane validation: when crop is sugarcane
+        sugarcane_type_val = farm_data.get('sugarcane_type')
+        sugarcane_yield_val = farm_data.get('sugarcane_yield')
+        crop_name = (crop_type.crop_type or '').strip().lower() if crop_type else ''
+        if crop_name == 'sugarcane':
+            if sugarcane_type_val == 'old':
+                if sugarcane_yield_val is None or (isinstance(sugarcane_yield_val, str) and str(sugarcane_yield_val).strip() == ''):
+                    raise serializers.ValidationError(
+                        "sugarcane_yield is required when sugarcane_type is 'old'."
+                    )
+            elif sugarcane_type_val == 'new':
+                sugarcane_yield_val = None
+
         # Get industry from field officer
         industry = get_user_industry(field_officer) if field_officer else None
         
@@ -553,6 +570,8 @@ class CompleteFarmerRegistrationService:
         plant_spacing=farm_data.get('plant_spacing'),
         flow_rate_liter_per_hour=farm_data.get('flow_rate_liter_per_hour'),
         emitters_per_plant=farm_data.get('emitters_per_plant'),
+        sugarcane_type=sugarcane_type_val,
+        sugarcane_yield=sugarcane_yield_val,
     )
 
         

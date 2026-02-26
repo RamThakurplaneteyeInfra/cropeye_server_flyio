@@ -244,7 +244,7 @@ class FarmAdmin(admin.ModelAdmin):
             )
         }),
         ('Sugarcane Specific', {
-            'fields': ('spacing_a', 'spacing_b'),
+            'fields': ('spacing_a', 'spacing_b', 'sugarcane_type', 'sugarcane_yield'),
             'classes': ('collapse',),
         }),
         ('Grapes Specific', {

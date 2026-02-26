@@ -286,6 +286,12 @@ class FarmWithIrrigationSerializer(serializers.ModelSerializer):
     # Sugarcane fields
     spacing_a = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, allow_null=True)
     spacing_b = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, allow_null=True)
+    sugarcane_type = serializers.ChoiceField(
+        choices=Farm.SUGARCANE_TYPE_CHOICES,
+        required=False,
+        allow_null=True,
+    )
+    sugarcane_yield = serializers.FloatField(required=False, allow_null=True)
     variety_type = serializers.ChoiceField(choices=Farm.VARIETY_TYPE_CHOICES, required=False, allow_null=True)
     variety_subtype = serializers.ChoiceField(choices=Farm.VARIETY_SUBTYPE_CHOICES, required=False, allow_null=True)
     variety_timing = serializers.ChoiceField(choices=Farm.VARIETY_TIMING_CHOICES, required=False, allow_null=True)
@@ -326,7 +332,7 @@ class FarmWithIrrigationSerializer(serializers.ModelSerializer):
             'soil_type', 'soil_type_id', 'crop_type', 'crop_type_name',
             'farm_document', 'plantation_date',
             # Sugarcane
-            'spacing_a', 'spacing_b', 
+            'spacing_a', 'spacing_b', 'sugarcane_type', 'sugarcane_yield',
             'variety_type', 'variety_subtype', 'variety_timing', 'plant_age',
             'foundation_pruning_date', 'fruit_pruning_date', 'last_harvesting_date', 'resting_period_days',
             # Drip irrigation
@@ -342,6 +348,30 @@ class FarmWithIrrigationSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['farm_uid', 'farm_owner', 'created_by', 'created_at', 'updated_at']
+
+    def _get_crop_name_fwirr(self, validated_data):
+        """Get crop name for FarmWithIrrigationSerializer."""
+        ct = validated_data.get('crop_type')
+        if ct:
+            return getattr(ct, 'crop_type', None) or str(ct)
+        return validated_data.get('crop_type_name')
+
+    def validate(self, validated_data):
+        """Sugarcane validation: sugarcane_type='old' requires sugarcane_yield; 'new' forces yield=None."""
+        crop_name = self._get_crop_name_fwirr(validated_data)
+        if not crop_name or str(crop_name).lower() != 'sugarcane':
+            return validated_data
+
+        st = validated_data.get('sugarcane_type')
+        sy = validated_data.get('sugarcane_yield')
+        if st == 'old':
+            if sy is None or (isinstance(sy, str) and str(sy).strip() == ''):
+                raise serializers.ValidationError({
+                    'sugarcane_yield': 'sugarcane_yield is required when sugarcane_type is "old".'
+                })
+        elif st == 'new':
+            validated_data['sugarcane_yield'] = None
+        return validated_data
 
     def create(self, validated_data):
         user = self.context['request'].user
@@ -477,7 +507,18 @@ class FarmSerializer(serializers.ModelSerializer):
     # Sugarcane fields
     spacing_a = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, allow_null=True)
     spacing_b = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, allow_null=True)
-    
+    sugarcane_type = serializers.ChoiceField(
+        choices=Farm.SUGARCANE_TYPE_CHOICES,
+        required=False,
+        allow_null=True,
+        help_text="'new' or 'old'. For sugarcane only."
+    )
+    sugarcane_yield = serializers.FloatField(
+        required=False,
+        allow_null=True,
+        help_text="Yield in ton per acre. Required when sugarcane_type is 'old'."
+    )
+
     # Grapes fields
     variety_type = serializers.ChoiceField(choices=Farm.VARIETY_TYPE_CHOICES, required=False, allow_null=True)
     variety_subtype = serializers.ChoiceField(choices=Farm.VARIETY_SUBTYPE_CHOICES, required=False, allow_null=True)
@@ -515,6 +556,8 @@ class FarmSerializer(serializers.ModelSerializer):
                 'farm_document',
                 'spacing_a',
                 'spacing_b',
+                'sugarcane_type',
+                'sugarcane_yield',
                 'crop_variety',
                 'variety_type',
                 'variety_subtype',
@@ -534,7 +577,35 @@ class FarmSerializer(serializers.ModelSerializer):
             ]
             read_only_fields = ['farm_uid', 'farm_owner', 'created_by', 'created_at', 'updated_at']
             # Mapping human-readable values to DB choice values
-   
+
+    def _get_crop_name(self, validated_data):
+        """Get crop name from validated_data or instance (for updates)."""
+        ct = validated_data.get('crop_type')
+        if ct:
+            return getattr(ct, 'crop_type', None) or str(ct)
+        name = validated_data.get('crop_type_name')
+        if name:
+            return name
+        if self.instance and self.instance.crop_type:
+            return self.instance.crop_type.crop_type
+        return None
+
+    def validate(self, validated_data):
+        """Sugarcane validation: sugarcane_type='old' requires sugarcane_yield; 'new' forces yield=None."""
+        crop_name = self._get_crop_name(validated_data)
+        if not crop_name or str(crop_name).lower() != 'sugarcane':
+            return validated_data
+
+        st = validated_data.get('sugarcane_type')
+        sy = validated_data.get('sugarcane_yield')
+        if st == 'old':
+            if sy is None or (isinstance(sy, str) and sy.strip() == ''):
+                raise serializers.ValidationError({
+                    'sugarcane_yield': 'sugarcane_yield is required when sugarcane_type is "old".'
+                })
+        elif st == 'new':
+            validated_data['sugarcane_yield'] = None
+        return validated_data
 
     def create(self, validated_data):
         user = self.context['request'].user

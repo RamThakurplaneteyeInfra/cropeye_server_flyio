@@ -1201,6 +1201,8 @@ class PlotViewSet(viewsets.ModelViewSet):
                     'variety_subtype': getattr(farm, 'variety_subtype', None),
                     'variety_timing': getattr(farm, 'variety_timing', None),
                     'plant_age': getattr(farm, 'plant_age', None),
+                    'sugarcane_type': getattr(farm, 'sugarcane_type', None),
+                    'sugarcane_yield': getattr(farm, 'sugarcane_yield', None),
                     'foundation_pruning_date': farm.foundation_pruning_date.isoformat() if farm.foundation_pruning_date else None,
                     'fruit_pruning_date': farm.fruit_pruning_date.isoformat() if farm.fruit_pruning_date else None,
                     'last_harvesting_date': farm.last_harvesting_date.isoformat() if farm.last_harvesting_date else None,

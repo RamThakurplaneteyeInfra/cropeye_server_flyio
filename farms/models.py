@@ -416,8 +416,24 @@ class Farm(models.Model):
     plantation_date = models.DateField(null=True, blank=True)
 
     crop_variety = models.CharField(max_length=200, null=True, blank=True, help_text="Crop variety (e.g., Co 86032, Co 8371, etc.)")
-    
 
+    # Sugarcane-specific fields (optional; validation applies when crop is sugarcane)
+    SUGARCANE_TYPE_CHOICES = [
+        ('new', 'New'),
+        ('old', 'Old'),
+    ]
+    sugarcane_type = models.CharField(
+        max_length=10,
+        choices=SUGARCANE_TYPE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Sugarcane type: 'new' (recently planted) or 'old' (ratoon). Only for sugarcane crop."
+    )
+    sugarcane_yield = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Sugarcane yield in ton per acre. Required when sugarcane_type is 'old'."
+    )
 
     # ===== New Fields for Variety Info =====
     VARIETY_TYPE_CHOICES = [
