@@ -1154,9 +1154,10 @@ class PlotViewSet(viewsets.ModelViewSet):
             to_attr='prefetched_farms'
         )
 
-        # Get all plots with related farmer/creator and farms
+        # Get all plots with related farmer, farmer's field officer, creator and farms
         queryset = Plot.objects.all().select_related(
             'farmer',
+            'farmer__created_by',
             'created_by'
         ).prefetch_related(farm_prefetch)
 
@@ -1249,6 +1250,14 @@ class PlotViewSet(viewsets.ModelViewSet):
                     'username': plot.farmer.username,
                     'full_name': f"{plot.farmer.first_name} {plot.farmer.last_name}".strip() or plot.farmer.username
                 } if plot.farmer else None,
+                'field_officer': (
+                    {
+                        'id': fo.id,
+                        'username': fo.username,
+                        'full_name': f"{fo.first_name} {fo.last_name}".strip() or fo.username
+                    }
+                    if (fo := (plot.farmer.created_by if plot.farmer else None) or plot.created_by) else None
+                ),
                 'created_at': plot.created_at.isoformat() if plot.created_at else None,
                 'updated_at': plot.updated_at.isoformat() if plot.updated_at else None,
                 'farms': farm_details,
