@@ -116,6 +116,14 @@ class User(AbstractUser):
     district        = models.CharField(max_length=100, blank=True)
     taluka          = models.CharField(max_length=100, blank=True)
     profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
+    aadhaar_number = models.CharField(
+        max_length=12,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Optional. 12-digit Aadhaar (stored without spaces).',
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -156,7 +164,11 @@ class User(AbstractUser):
         # Convert empty string to None to avoid unique constraint issues
         if self.phone_number == '' or (isinstance(self.phone_number, str) and not self.phone_number.strip()):
             self.phone_number = None
-        
+        if self.aadhaar_number == '' or (
+            isinstance(self.aadhaar_number, str) and not str(self.aadhaar_number).strip()
+        ):
+            self.aadhaar_number = None
+
         if self.phone_number:
             # Remove any non-digit characters
             cleaned_phone = re.sub(r'\D', '', self.phone_number)
@@ -176,6 +188,11 @@ class User(AbstractUser):
             self.phone_number = None
         
         # Clean phone number before saving
+        if self.aadhaar_number == '' or (
+            isinstance(self.aadhaar_number, str) and not self.aadhaar_number.strip()
+        ):
+            self.aadhaar_number = None
+
         if self.phone_number:
             cleaned_phone = re.sub(r'\D', '', self.phone_number)
             # If starts with 91 (country code), remove it to get 10 digits

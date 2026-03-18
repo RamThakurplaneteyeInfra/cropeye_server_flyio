@@ -190,7 +190,18 @@ class CompleteFarmerRegistrationService:
         else:
             # Set to None if not provided (since phone_number is nullable)
             farmer_data['phone_number'] = None
-        
+
+        aadhaar_raw = farmer_data.pop('aadhaar_number', None)
+        try:
+            from users.validators import normalize_optional_aadhaar
+            aadhaar_clean = normalize_optional_aadhaar(aadhaar_raw)
+        except ValueError as e:
+            raise serializers.ValidationError({'aadhaar_number': str(e)})
+        if aadhaar_clean and User.objects.filter(aadhaar_number=aadhaar_clean).exists():
+            raise serializers.ValidationError(
+                {'aadhaar_number': 'A user with this Aadhaar number already exists.'}
+            )
+
         # Validate field officer has industry
         if field_officer and not field_officer.industry:
             raise serializers.ValidationError(
@@ -206,7 +217,7 @@ class CompleteFarmerRegistrationService:
             raise serializers.ValidationError("Farmer role not found in system")
         
         # Create farmer with industry assignment from field officer
-        farmer = User.objects.create_user(
+        create_kwargs = dict(
             username=farmer_data['username'],
             email=farmer_data['email'],
             password=farmer_data['password'],
@@ -219,9 +230,12 @@ class CompleteFarmerRegistrationService:
             district=farmer_data.get('district', ''),
             taluka=farmer_data.get('taluka', ''),
             role=farmer_role,
-            created_by=field_officer,  # Set the field officer as creator
-            industry=field_officer.industry if field_officer else None  # Assign industry from field officer
+            created_by=field_officer,
+            industry=field_officer.industry if field_officer else None,
         )
+        if aadhaar_clean:
+            create_kwargs['aadhaar_number'] = aadhaar_clean
+        farmer = User.objects.create_user(**create_kwargs)
         
         logger.info(
             f"Created farmer: {farmer.username} (ID: {farmer.id}) "

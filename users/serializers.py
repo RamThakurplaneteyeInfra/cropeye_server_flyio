@@ -405,13 +405,16 @@ class UserCreateSerializer(serializers.ModelSerializer):
     role_id = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
     # Industry is set automatically by the view, but we include it in fields to allow it
     industry = serializers.PrimaryKeyRelatedField(queryset=Industry.objects.all(), required=False, write_only=True)
-    
+    aadhaar_number = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, allow_null=True, max_length=32
+    )
+
     class Meta:
         model = User
         fields = [
             'username', 'email', 'password', 'first_name', 'last_name',
             'phone_number', 'address', 'village', 'taluka', 'district', 'state',
-            'role_id', 'industry'
+            'role_id', 'industry', 'aadhaar_number',
         ]
     
     def validate_phone_number(self, value):
@@ -507,6 +510,17 @@ class UserCreateSerializer(serializers.ModelSerializer):
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
         return value
+
+    def validate_aadhaar_number(self, value):
+        from .validators import normalize_optional_aadhaar
+
+        try:
+            normalized = normalize_optional_aadhaar(value)
+        except ValueError as e:
+            raise serializers.ValidationError(str(e)) from e
+        if normalized and User.objects.filter(aadhaar_number=normalized).exists():
+            raise serializers.ValidationError('A user with this Aadhaar number already exists.')
+        return normalized
     
     def validate_industry(self, value):
         """
