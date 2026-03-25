@@ -1,14 +1,97 @@
+import copy
+import json
 from django.db import transaction
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from .models import Farm, Plot, SoilType, CropType, IrrigationType
 from users.multi_tenant_utils import get_user_industry
 import logging
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+
+def _coerce_json_field(val, field_name, expect_list=False):
+    """Parse multipart form JSON string or return a deep-copied dict/list."""
+    if val is None:
+        return None
+    if expect_list:
+        if isinstance(val, list):
+            return copy.deepcopy(val)
+        if isinstance(val, str):
+            s = val.strip()
+            if not s:
+                return []
+            try:
+                out = json.loads(s)
+            except json.JSONDecodeError as e:
+                raise ValidationError({field_name: f'Invalid JSON: {e}'})
+            if not isinstance(out, list):
+                raise ValidationError({field_name: 'Expected a JSON array'})
+            return out
+        raise ValidationError({field_name: 'Expected JSON array or string'})
+    if isinstance(val, dict):
+        return copy.deepcopy(val)
+    if isinstance(val, str):
+        s = val.strip()
+        if not s:
+            return {}
+        try:
+            out = json.loads(s)
+        except json.JSONDecodeError as e:
+            raise ValidationError({field_name: f'Invalid JSON: {e}'})
+        if not isinstance(out, dict):
+            raise ValidationError({field_name: 'Expected a JSON object'})
+        return out
+    return val
+
+
+def prepare_register_farmer_request_data(request):
+    """
+    Normalize register-farmer payload for JSON or multipart/form-data.
+
+    When uploading farm_document (FileField for Farm), use multipart with:
+      - farmer, plot, farm, irrigation as JSON strings (single plot), OR
+      - plots as a JSON array string (multi plot)
+      - file field: farm_document (attached to the farm for single plot, or first plot's farm)
+
+    Pure application/json requests work unchanged (no file upload).
+    """
+    raw = request.data
+    farm_doc = request.FILES.get('farm_document') if getattr(request, 'FILES', None) else None
+
+    if farm_doc:
+        data = {}
+        for key in ('farmer', 'plot', 'farm', 'irrigation'):
+            if key in raw:
+                data[key] = _coerce_json_field(raw.get(key), key, expect_list=False)
+        if 'plots' in raw:
+            data['plots'] = _coerce_json_field(raw.get('plots'), 'plots', expect_list=True)
+        if data.get('plots'):
+            plots = copy.deepcopy(data['plots'])
+            if not plots:
+                raise ValidationError({'farm_document': 'plots must not be empty when uploading farm_document'})
+            first = plots[0] if isinstance(plots[0], dict) else {}
+            if not isinstance(first, dict):
+                raise ValidationError({'plots': 'Each plot entry must be an object'})
+            f0_farm = dict(first.get('farm') or {})
+            f0_farm['farm_document'] = farm_doc
+            first = {**first, 'farm': f0_farm}
+            plots[0] = first
+            data['plots'] = plots
+        else:
+            farm = dict(data.get('farm') or {})
+            farm['farm_document'] = farm_doc
+            data['farm'] = farm
+        return data
+
+    try:
+        return copy.deepcopy(dict(raw))
+    except Exception:
+        return dict(raw)
 
 class CompleteFarmerRegistrationService:
     """
@@ -120,6 +203,8 @@ class CompleteFarmerRegistrationService:
                         farm_data['sugarcane_type'] = data['farm']['sugarcane_type']
                     if farm_data.get('sugarcane_yield') is None and data.get('farm', {}).get('sugarcane_yield') is not None:
                         farm_data['sugarcane_yield'] = data['farm']['sugarcane_yield']
+                    if not farm_data.get('farm_document') and data.get('farm', {}).get('farm_document'):
+                        farm_data['farm_document'] = data['farm']['farm_document']
 
                     farm = CompleteFarmerRegistrationService._create_farm(
                         farm_data, farmer, field_officer, plot
@@ -553,40 +638,43 @@ class CompleteFarmerRegistrationService:
 
         # Get industry from field officer
         industry = get_user_industry(field_officer) if field_officer else None
-        
 
-        # Create farm
-        farm = Farm.objects.create(
-        address=farm_data['address'],
-        area_size=farm_data['area_size'],
-        farm_owner=farmer,
-        created_by=field_officer,
-        plot=plot,
-        soil_type=soil_type,
-        crop_type=crop_type,
-        spacing_a=farm_data.get('spacing_a'),
-        spacing_b=farm_data.get('spacing_b'),
-        crop_variety=crop_variety,
-        industry=industry,
-        
-        # Add the rest of your fields
-        plantation_date=plantation_date,
+        farm_document = farm_data.get('farm_document')
+        if farm_document is not None and not hasattr(farm_document, 'read'):
+            farm_document = None
 
-        variety_type=farm_data.get('variety_type'),
-        variety_subtype=farm_data.get('variety_subtype'),
-        variety_timing=farm_data.get('variety_timing'),
-        plant_age=farm_data.get('plant_age'),
-        foundation_pruning_date=farm_data.get('foundation_pruning_date'),
-        fruit_pruning_date=farm_data.get('fruit_pruning_date'),
-        last_harvesting_date=farm_data.get('last_harvesting_date'),
-        resting_period_days=farm_data.get('resting_period_days'),
-        row_spacing=farm_data.get('row_spacing'),
-        plant_spacing=farm_data.get('plant_spacing'),
-        flow_rate_liter_per_hour=farm_data.get('flow_rate_liter_per_hour'),
-        emitters_per_plant=farm_data.get('emitters_per_plant'),
-        sugarcane_type=sugarcane_type_val,
-        sugarcane_yield=sugarcane_yield_val,
-    )
+        create_kwargs = dict(
+            address=farm_data['address'],
+            area_size=farm_data['area_size'],
+            farm_owner=farmer,
+            created_by=field_officer,
+            plot=plot,
+            soil_type=soil_type,
+            crop_type=crop_type,
+            spacing_a=farm_data.get('spacing_a'),
+            spacing_b=farm_data.get('spacing_b'),
+            crop_variety=crop_variety,
+            industry=industry,
+            plantation_date=plantation_date,
+            variety_type=farm_data.get('variety_type'),
+            variety_subtype=farm_data.get('variety_subtype'),
+            variety_timing=farm_data.get('variety_timing'),
+            plant_age=farm_data.get('plant_age'),
+            foundation_pruning_date=farm_data.get('foundation_pruning_date'),
+            fruit_pruning_date=farm_data.get('fruit_pruning_date'),
+            last_harvesting_date=farm_data.get('last_harvesting_date'),
+            resting_period_days=farm_data.get('resting_period_days'),
+            row_spacing=farm_data.get('row_spacing'),
+            plant_spacing=farm_data.get('plant_spacing'),
+            flow_rate_liter_per_hour=farm_data.get('flow_rate_liter_per_hour'),
+            emitters_per_plant=farm_data.get('emitters_per_plant'),
+            sugarcane_type=sugarcane_type_val,
+            sugarcane_yield=sugarcane_yield_val,
+        )
+        if farm_document is not None:
+            create_kwargs['farm_document'] = farm_document
+
+        farm = Farm.objects.create(**create_kwargs)
 
         
         logger.info(f"Created farm: {farm.farm_uid} (ID: {farm.id}) for farmer {farmer.username} , crop_variety: {crop_variety}")

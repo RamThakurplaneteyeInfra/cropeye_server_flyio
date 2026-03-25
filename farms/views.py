@@ -11,7 +11,7 @@ from rest_framework.exceptions import ValidationError
 from django.db.models import Prefetch
 from users.multi_tenant_utils import filter_by_industry, get_user_industry
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from .models import (
     SoilType,
     CropType,
@@ -413,13 +413,25 @@ class FarmViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
-    @action(detail=False, methods=['post'], url_path='register-farmer')
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='register-farmer',
+        parser_classes=[JSONParser, MultiPartParser, FormParser],
+    )
     def register_farmer(self, request):
     
         """
         Complete farmer registration endpoint - creates farmer, plot, farm, and irrigation in one call
         Supports both single plot and multiple plots registration.
-        
+
+        Optional farm document (same as Farm.farm_document on add-farm):
+        - Send multipart/form-data with file field **farm_document**.
+        - Include **farmer**, **plot**, **farm**, **irrigation** as JSON strings (single plot), OR **plots** as a JSON array string.
+        - The file is stored on the created Farm (single plot: top-level farm; multiple plots: first plot's farm).
+
+        Farmer JSON may include **aadhaar_number** after other profile fields; farm document is uploaded as the file field above.
+
         Expected JSON structure (multiple plots):
         {
             "farmer": {
@@ -515,11 +527,14 @@ class FarmViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            from .farmer_registration_service import CompleteFarmerRegistrationService
+            from .farmer_registration_service import (
+                CompleteFarmerRegistrationService,
+                prepare_register_farmer_request_data,
+            )
 
-            # Perform complete registration
+            payload = prepare_register_farmer_request_data(request)
             result = CompleteFarmerRegistrationService.register_complete_farmer(
-                request.data,
+                payload,
                 user
             )
 
@@ -548,6 +563,11 @@ class FarmViewSet(viewsets.ModelViewSet):
                 'ids': all_ids
             }, status=201)
 
+        except ValidationError as e:
+            return Response(
+                {'success': False, 'error': e.detail if hasattr(e, 'detail') else str(e)},
+                status=400,
+            )
         except Exception as e:
             return Response({
                 'success': False,
