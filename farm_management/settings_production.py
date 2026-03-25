@@ -19,6 +19,8 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 # Render and Fly terminate TLS and forward Host; exact hostnames vary. Restricting
 # causes DisallowedHost. Restrict via ALLOWED_HOSTS env only if you run without a proxy.
 _render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+# Railway injects the service’s public hostname (e.g. app.up.railway.app); required for CSRF on admin/forms.
+_railway_public_domain = (os.environ.get('RAILWAY_PUBLIC_DOMAIN') or '').strip()
 fly_app = os.environ.get('FLY_APP_NAME', 'cropeye-server')
 allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '').strip()
 if allowed_hosts_env and allowed_hosts_env != '*':
@@ -33,6 +35,8 @@ if allowed_hosts_env and allowed_hosts_env != '*':
             ALLOWED_HOSTS.append(domain)
     if _render_host and _render_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(_render_host)
+    if _railway_public_domain and _railway_public_domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_railway_public_domain)
 else:
     ALLOWED_HOSTS = ['*']
 
@@ -44,8 +48,12 @@ csrf_origins = [
     'https://cropeye-server-flyio.onrender.com',
     'https://farm-management-web.onrender.com',
     'https://farm-management-web-production-c3ca.up.railway.app',
- 
 ]
+if _railway_public_domain:
+    _railway_origin = _railway_public_domain.rstrip('/')
+    if not _railway_origin.startswith(('http://', 'https://')):
+        _railway_origin = f'https://{_railway_origin}'
+    csrf_origins.append(_railway_origin)
 if _render_host:
     csrf_origins.append(f'https://{_render_host}')
 _csrf_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')

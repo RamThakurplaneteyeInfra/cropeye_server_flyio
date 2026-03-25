@@ -38,4 +38,3 @@ exec gunicorn farm_management.wsgi:application \
     --access-logfile - \
     --error-logfile - \
     2>&1 | python3 /app/filter_health_checks.py
-

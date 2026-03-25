@@ -57,5 +57,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/api/health/ || exit 1
 
-# Run the application using the wrapper script
-CMD ["/app/start_server.sh"]
+# Run via /bin/sh so CRLF shebang on Windows bind-mounts does not break exec
+CMD ["/bin/sh", "/app/start_server.sh"]
