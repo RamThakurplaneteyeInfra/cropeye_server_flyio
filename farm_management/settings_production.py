@@ -43,6 +43,8 @@ csrf_origins = [
     'https://cropeye-server.onrender.com',
     'https://cropeye-server-flyio.onrender.com',
     'https://farm-management-web.onrender.com',
+    'https://farm-management-web-production-c3ca.up.railway.app',
+ 
 ]
 if _render_host:
     csrf_origins.append(f'https://{_render_host}')
