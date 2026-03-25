@@ -81,6 +81,32 @@ if allowed_hosts_env == '*':
 else:
     ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',') if host.strip()]
 
+# Hosted on Railway (or similar) with DATABASE_URL but DJANGO_SETTINGS_MODULE=farm_management.settings:
+# trust proxy headers and set CSRF origins so admin POSTs match the browser Origin.
+_is_railway = bool(
+    os.environ.get('RAILWAY_PROJECT_ID')
+    or os.environ.get('RAILWAY_PUBLIC_DOMAIN')
+    or os.environ.get('RAILWAY_ENVIRONMENT_NAME')
+)
+if _is_railway:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
+
+_csrf_settings_origins = []
+_railway_pub = (os.environ.get('RAILWAY_PUBLIC_DOMAIN') or '').strip()
+if _railway_pub:
+    _ro = _railway_pub.rstrip('/')
+    if not _ro.startswith(('http://', 'https://')):
+        _ro = f'https://{_ro}'
+    _csrf_settings_origins.append(_ro)
+_csrf_env_settings = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+if _csrf_env_settings:
+    _csrf_settings_origins.extend(
+        o.strip() for o in _csrf_env_settings.split(',') if o.strip()
+    )
+if _csrf_settings_origins:
+    CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_csrf_settings_origins))
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',

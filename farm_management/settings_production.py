@@ -61,6 +61,11 @@ if _csrf_env:
     csrf_origins.extend(o.strip() for o in _csrf_env.split(',') if o.strip())
 CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(csrf_origins))
 
+# Railway / Render / Fly terminate TLS and forward HTTP. Without this, request.is_secure()
+# and get_host() are wrong, so CSRF compares Origin to http://internal:port and fails.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
