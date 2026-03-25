@@ -27,14 +27,16 @@ python manage.py migrate --noinput
 echo '📁 Collecting static files...'
 python manage.py collectstatic --noinput
 
-echo '🌐 Starting Gunicorn server (health checks filtered from logs)...'
+echo '🌐 Starting Gunicorn server...'
 
 # PORT: Fly.io uses 8080, Render uses PORT from env, local default 8000
 PORT=${PORT:-8000}
+# Do not pipe stdout/stderr through another process: a full pipe buffer blocks
+# Gunicorn workers and causes WORKER TIMEOUT / apparent crashes on Railway.
 exec gunicorn farm_management.wsgi:application \
     --bind 0.0.0.0:$PORT \
     --workers 3 \
     --timeout 120 \
+    --graceful-timeout 30 \
     --access-logfile - \
-    --error-logfile - \
-    2>&1 | python3 /app/filter_health_checks.py
+    --error-logfile -

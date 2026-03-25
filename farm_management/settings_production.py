@@ -178,6 +178,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+_static_project = BASE_DIR / 'static'
+STATICFILES_DIRS = [_static_project] if _static_project.is_dir() else []
 
 # Media files
 MEDIA_URL = '/media/'
@@ -317,6 +319,8 @@ SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 # Logging
 LOGGING = {
