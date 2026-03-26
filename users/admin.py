@@ -294,7 +294,12 @@ class UserAdmin(DjangoUserAdmin):
         'phone_number', 'username', 'email', 'aadhaar_number', 'role', 'industry', 'get_crop_type', 'get_created_by_email',
         'is_active', 'is_staff', 'is_superuser', 'date_joined'
     )
-    list_filter     = ('role', 'industry', 'is_active', 'is_staff', 'is_superuser', 'created_by')
+    # Keep the admin changelist lightweight to avoid worker timeouts.
+    list_per_page = 25
+    # NOTE: Avoid including `created_by` in list_filter.
+    # Django admin computes per-option COUNTs for FK filters; with many distinct creators
+    # this can cause huge numbers of COUNT queries, leading to slow loads/timeouts.
+    list_filter     = ('role', 'industry', 'is_active', 'is_staff', 'is_superuser')
     search_fields   = ('phone_number', 'username', 'email', 'created_by__phone_number', 'created_by__email', 'industry__name')
     ordering        = ('-date_joined',)
     filter_horizontal = ('groups', 'user_permissions',)

@@ -140,6 +140,9 @@ if not _db_host:
         'DB_HOST is required in production. Set DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD in .env (e.g. Railway).'
     )
 
+_db_sslmode = (os.environ.get('DB_SSLMODE') or '').strip()
+_db_options = {'sslmode': _db_sslmode} if _db_sslmode else {}
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.contrib.gis.db.backends.postgis',
@@ -148,7 +151,7 @@ DATABASES = {
         'PASSWORD': (os.environ.get('DB_PASSWORD') or ''),
         'HOST': _db_host,
         'PORT': (os.environ.get('DB_PORT') or '').strip() or '5432',
-        'OPTIONS': {'sslmode': 'require'},
+        'OPTIONS': _db_options,
         'DISABLE_SERVER_SIDE_CURSORS': True,
     }
 }

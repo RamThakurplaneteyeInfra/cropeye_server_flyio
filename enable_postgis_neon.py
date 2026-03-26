@@ -29,6 +29,7 @@ def main():
     port = (os.environ.get('DB_PORT') or '').strip() or '5432'
     user = (os.environ.get('DB_USER') or '').strip() or 'postgres'
     password = os.environ.get('DB_PASSWORD') or ''
+    sslmode = (os.environ.get('DB_SSLMODE') or '').strip() or 'prefer'
 
     print('Enabling PostGIS extension on database...')
     try:
@@ -38,7 +39,7 @@ def main():
             dbname=dbname[:63],
             user=user,
             password=password,
-            sslmode='require',
+            sslmode=sslmode,
             connect_timeout=10,
         )
         conn.autocommit = True
