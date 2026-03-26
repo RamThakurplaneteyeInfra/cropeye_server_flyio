@@ -220,6 +220,8 @@ class FarmAdminForm(forms.ModelForm):
 @admin.register(Farm)
 class FarmAdmin(admin.ModelAdmin):
     form = FarmAdminForm
+    # Keep admin changelist pages snappy (also reduces memory spikes).
+    list_per_page = 25
     list_display = (
         'farm_owner',
         'farm_uid',
@@ -245,7 +247,6 @@ class FarmAdmin(admin.ModelAdmin):
         'variety_timing',
         'plant_age',
         'created_at',
-        'created_by',
     )
 
     list_select_related = ('farm_owner', 'industry', 'soil_type', 'crop_type', 'created_by')
@@ -313,7 +314,12 @@ class FarmAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        qs = qs.select_related('farm_owner', 'industry', 'soil_type', 'crop_type', 'created_by')
+        # Defer heavy columns not used in the changelist to reduce row payload.
+        # (This matters when admin loads many rows while building the changelist.)
+        qs = qs.select_related('farm_owner', 'industry', 'soil_type', 'crop_type', 'created_by').defer(
+            'address',
+            'farm_document',
+        )
         if request.user.is_superuser:
             return qs
         if hasattr(request.user, 'industry') and request.user.industry:
@@ -347,7 +353,9 @@ class PlotAdmin(LeafletGeoAdmin):
         'country',
         'get_created_by_email',
     )
-    list_filter = ('industry', 'village', 'taluka', 'district', 'state', 'country', 'created_by')
+    # Keep list pages lightweight; avoid FK filters that can trigger many COUNTs.
+    list_filter = ('industry', 'village', 'taluka', 'district', 'state', 'country')
+    list_per_page = 25
     search_fields = ('gat_number', 'plot_number', 'created_by__email', 'industry__name')
     list_select_related = ('industry', 'created_by')
 
@@ -375,6 +383,8 @@ class PlotAdmin(LeafletGeoAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         qs = qs.select_related('industry', 'created_by')
+        # Geometry fields are not shown in the changelist; defer for performance.
+        qs = qs.defer('location', 'boundary')
         if request.user.is_superuser:
             return qs
         if hasattr(request.user, 'industry') and request.user.industry:
