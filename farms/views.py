@@ -11,6 +11,10 @@ from rest_framework.exceptions import ValidationError
 from django.db.models import Prefetch
 from users.multi_tenant_utils import filter_by_industry, get_user_industry
 from rest_framework.viewsets import ModelViewSet
+<<<<<<< Updated upstream
+=======
+from rest_framework import status
+>>>>>>> Stashed changes
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from .models import (
     SoilType,
@@ -23,6 +27,9 @@ from .models import (
     FarmSensor,
     FarmIrrigation,
     GrapseReport,
+    SoilReport,
+    PlantationRecord
+    
 )
 from .serializers import (
     SoilTypeSerializer,
@@ -38,7 +45,11 @@ from .serializers import (
     FarmImageSerializer,
     FarmSensorSerializer,
     FarmIrrigationSerializer,
-    GrapseReportSerializer
+    GrapseReportSerializer,
+    SoilReportSerializer,
+    PlantationRecordSerializer
+
+   
 )
 
 
@@ -247,10 +258,8 @@ class FarmViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=user, industry=user_industry, farm_owner=farm_owner)
 
     def perform_update(self, serializer):
-        user = self.request.user
-        if user.has_role('fieldofficer') and not self.request.data.get('farm_owner'):
-            raise ValidationError("Field Officer must specify farm_owner.")
         serializer.save()
+
 
     @action(detail=False, methods=['get'])
     def geojson(self, request):
@@ -413,6 +422,7 @@ class FarmViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
+<<<<<<< Updated upstream
     @action(
         detail=False,
         methods=['post'],
@@ -516,13 +526,39 @@ class FarmViewSet(viewsets.ModelViewSet):
         }
         
         Note: Irrigation type names should be lowercase: "drip", "flood", "sprinkler", etc.
+=======
+    @action(detail=False, methods=['post'], url_path='register-farmer/(?P<industry_slug>sugarcane|grapes)')
+    def register_farmer(self, request, industry_slug=None):
+        """
+        Industry-specific farmer registration. Creates farmer, plot, farm, and irrigation.
+        Use:
+          POST /api/farms/register-farmer/sugarcane/  — sugarcane industry only (plantation_type, irrigation, etc.)
+          POST /api/farms/register-farmer/grapes/     — grapes industry only (plant_age, plantation record, etc.)
+        Field officer's industry must match the slug; payload is validated for that crop only.
+        Supports single plot or multiple plots. Irrigation type names: lowercase (drip, flood, sprinkler, etc.).
+>>>>>>> Stashed changes
         """
         user = request.user
 
-        # Check if user is field officer
         if not user.has_role('fieldofficer'):
             return Response(
                 {'error': 'Only field officers can register farmers'},
+                status=403
+            )
+
+        if not getattr(user, 'industry', None):
+            return Response(
+                {'error': 'Field officer must be assigned to an industry before registering farmers.'},
+                status=403
+            )
+
+        user_crop = (user.industry.crop_type or '').lower().strip()
+        slug_normalized = (industry_slug or '').lower().strip()
+        if user_crop != slug_normalized:
+            return Response(
+                {
+                    'error': f'Industry mismatch. Your industry is "{user_crop}". Use /api/farms/register-farmer/{user_crop}/ for registration.'
+                },
                 status=403
             )
 
@@ -532,13 +568,19 @@ class FarmViewSet(viewsets.ModelViewSet):
                 prepare_register_farmer_request_data,
             )
 
+<<<<<<< Updated upstream
             payload = prepare_register_farmer_request_data(request)
             result = CompleteFarmerRegistrationService.register_complete_farmer(
                 payload,
                 user
+=======
+            result = CompleteFarmerRegistrationService.register_complete_farmer(
+                request.data,
+                user,
+                industry_slug=slug_normalized
+>>>>>>> Stashed changes
             )
 
-            # Get detailed summary for all created entities
             registration_summary = []
             all_ids = {'farmer_id': result['farmer'].id, 'plots': []}
 
@@ -547,27 +589,57 @@ class FarmViewSet(viewsets.ModelViewSet):
                     result['farmer'],
                     entities.get('plot'),
                     entities.get('farm'),
-                    entities.get('irrigation')
+                    entities.get('irrigation'),
+                    entities.get('soil_report'),
+                    entities.get('plantation')
                 )
                 registration_summary.append(summary)
                 all_ids['plots'].append({
                     'plot_id': entities['plot'].id if entities.get('plot') else None,
                     'farm_id': entities['farm'].id if entities.get('farm') else None,
                     'irrigation_id': entities['irrigation'].id if entities.get('irrigation') else None,
+                    'soil_report_id': entities['soil_report'].id if entities.get('soil_report') else None,
+                    'plantation_id': entities['plantation'].id if entities.get('plantation') else None,
                 })
 
             return Response({
                 'success': True,
                 'message': result['message'],
+                'industry': slug_normalized,
                 'registration_summary': registration_summary,
                 'ids': all_ids
             }, status=201)
 
         except ValidationError as e:
+<<<<<<< Updated upstream
             return Response(
                 {'success': False, 'error': e.detail if hasattr(e, 'detail') else str(e)},
                 status=400,
             )
+=======
+            error_detail = e.detail
+            if isinstance(error_detail, dict):
+                msg = error_detail.get('plot') or error_detail.get('non_field_errors')
+                if msg is None and error_detail:
+                    msg = list(error_detail.values())[0] if error_detail else 'Validation failed'
+                if isinstance(msg, list):
+                    msg = msg[0] if msg else 'Validation failed'
+                return Response({
+                    'success': False,
+                    'error': str(msg) if msg else 'Validation failed',
+                    'details': error_detail,
+                }, status=400)
+            if isinstance(error_detail, list):
+                return Response({
+                    'success': False,
+                    'error': str(error_detail[0]) if error_detail else 'Validation failed',
+                    'details': error_detail,
+                }, status=400)
+            return Response({
+                'success': False,
+                'error': str(error_detail),
+            }, status=400)
+>>>>>>> Stashed changes
         except Exception as e:
             return Response({
                 'success': False,
@@ -1424,8 +1496,64 @@ class GrapseReportViewSet(viewsets.ModelViewSet):
     queryset = GrapseReport.objects.all().order_by('-uploaded_at')
     serializer_class = GrapseReportSerializer
     permission_classes = [permissions.IsAuthenticated]  # Only logged-in users can access
-    parser_classes = [MultiPartParser, FormParser]  # Handle file uploads
+    parser_classes = [JSONParser, MultiPartParser, FormParser]  # Handle file uploads and JSON
 
     def perform_create(self, serializer):
         # Automatically set the uploaded_by field to the logged-in user
         serializer.save(uploaded_by=self.request.user)
+
+class SoilReportViewSet(viewsets.ModelViewSet):
+    queryset = SoilReport.objects.all()
+    serializer_class = SoilReportSerializer
+    lookup_field = 'id'  # Use report ID for retrieve/update/delete
+
+    # List all soil reports with optional filtering
+    def list(self, request, *args, **kwargs):
+        queryset = self.queryset
+        # Filter dynamically by query parameters
+        for key, value in request.query_params.items():
+            if key in [f.name for f in SoilReport._meta.get_fields()]:
+                queryset = queryset.filter(**{key: value})
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    # Create a new soil report
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    # Update a soil report completely
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # Partial update of a soil report
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # Delete a soil report
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({"detail": "Soil report deleted"}, status=status.HTTP_204_NO_CONTENT)
+class NewPlantationViewSet(viewsets.ModelViewSet):
+    serializer_class = PlantationRecordSerializer
+
+    def get_queryset(self):
+        return PlantationRecord.objects.filter(source_type="NEW")
+
+
+class RegistrationViewSet(viewsets.ModelViewSet):
+    serializer_class = PlantationRecordSerializer
+
+    def get_queryset(self):
+        return PlantationRecord.objects.filter(source_type="REG")

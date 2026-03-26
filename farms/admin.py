@@ -5,6 +5,10 @@ from users.admin import IndustryFilteredAdmin
 from django import forms
 from .models import Farm
 from .models import GrapseReport
+from .models import Farm, SoilReport
+from django.utils.html import format_html
+from .forms import PlantationRecordForm
+
 
 
 from .models import (
@@ -19,6 +23,7 @@ from .models import (
     FarmImage,
     FarmSensor,
     FarmIrrigation,
+    PlantationRecord,
 )
 
 
@@ -176,7 +181,41 @@ class FarmAdminForm(forms.ModelForm):
             'foundation_pruning_date': forms.DateInput(attrs={'type': 'date'}),
             'fruit_pruning_date': forms.DateInput(attrs={'type': 'date'}),
             'last_harvesting_date': forms.DateInput(attrs={'type': 'date'}),
-        }
+            'new_plantation_date': forms.DateInput(attrs={'type': 'date'}),
+            'new_foundation_pruning_date': forms.DateInput(attrs={'type': 'date'}),
+            'new_fruit_pruning_date': forms.DateInput(attrs={'type': 'date'}),
+            'new_last_harvesting_date': forms.DateInput(attrs={'type': 'date'}),
+        }   
+    def clean(self):
+        cleaned_data = super().clean()
+        plant_age = cleaned_data.get('plant_age')
+        variety_type = cleaned_data.get('variety_type')
+        variety_subtype = cleaned_data.get('variety_subtype')
+        variety_timing = cleaned_data.get('variety_timing')
+        foundation_pruning_date = cleaned_data.get('foundation_pruning_date')
+        fruit_pruning_date = cleaned_data.get('fruit_pruning_date')
+        last_harvesting_date = cleaned_data.get('last_harvesting_date')
+
+        # Only validate for grapes (or plants older than 2 years)
+        if plant_age and plant_age not in ['0-2 years', '0-2']:
+            missing_fields = []
+            for field_name, field_label in [
+                ('variety_type', 'Variety Type'),
+                ('variety_subtype', 'Variety Subtype'),
+                ('variety_timing', 'Variety Timing'),
+                ('foundation_pruning_date', 'Foundation Pruning Date'),
+                ('fruit_pruning_date', 'Fruit Pruning Date'),
+                ('last_harvesting_date', 'Last Harvesting Date'),
+            ]:
+                if not cleaned_data.get(field_name):
+                    missing_fields.append(field_label)
+
+            if missing_fields:
+                raise forms.ValidationError(
+                    f"The following grape fields are required for plants older than 2 years: {', '.join(missing_fields)}"
+                )
+
+        return cleaned_data
 
 @admin.register(Farm)
 class FarmAdmin(admin.ModelAdmin):
@@ -240,6 +279,7 @@ class FarmAdmin(admin.ModelAdmin):
                 'soil_type',
                 'crop_type',
                 'crop_variety',
+                'plantation_date',
                 'farm_document',
             )
         }),
@@ -264,6 +304,7 @@ class FarmAdmin(admin.ModelAdmin):
             ),
             'classes': ('collapse',),
         }),
+        
         ('Metadata', {
             'fields': ('farm_uid', 'created_by', 'created_at', 'updated_at'),
             'classes': ('collapse',),
@@ -427,3 +468,78 @@ class GrapseReportAdmin(admin.ModelAdmin):
     search_fields = ('plot__name', 'uploaded_by__username', 'notes')
 
     fields = ('plot', 'file_type', 'file', 'uploaded_by', 'notes')
+@admin.register(SoilReport)
+class SoilReportAdmin(admin.ModelAdmin):
+    list_display = ('farm', 'nitrogen', 'phosphorus', 'potassium', 'soil_ph')
+    search_fields = ('farm__variety',)
+
+@admin.register(PlantationRecord)
+class PlantationRecordAdmin(admin.ModelAdmin):
+    form = PlantationRecordForm
+
+    list_display = (
+        "id",
+        "farm",
+        "plantation_date",
+        "rootstock",
+        "grafting_date",
+        "grafted_variety",
+        "soil_type",
+        "foundation_pruning_date",
+        "fruit_pruning_date",
+        "irrigation_type",
+        "last_harvesting_date",
+        "intercropping",
+        "colored_source_type",
+    )
+
+    list_filter = (
+        "grafted_variety",
+        "rootstock",
+        "soil_type",
+        "irrigation_type",
+        "source_type",
+    )
+
+    search_fields = ("farm__farm_name",)
+    readonly_fields = ("source_type", "created_at")
+
+    # 🔹 Fieldsets dynamically shown
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = [
+            ("Common Fields", {
+                "fields": (
+                    "farm",
+                    "plantation_date",
+                    "grafted_variety",
+                    "soil_type",
+                    "foundation_pruning_date",
+                    "fruit_pruning_date",
+                )
+            }),
+        ]
+
+        if obj and obj.farm:
+            farm_age = obj.farm.plant_age
+            if farm_age == "0_2":
+                fieldsets.append(("New Plantation Details", {"fields": ("rootstock", "grafting_date")}))
+            elif farm_age == "2_13":
+                fieldsets.append(("Registration Details", {"fields": ("irrigation_type", "last_harvesting_date", "intercropping")}))
+        else:
+            # If creating new object, show all sections
+            fieldsets.append(("New Plantation Details", {"fields": ("rootstock", "grafting_date")}))
+            fieldsets.append(("Registration Details", {"fields": ("irrigation_type", "last_harvesting_date", "intercropping")}))
+
+        return fieldsets
+
+    # 🔹 Colored display for source_type
+    def colored_source_type(self, obj):
+        if obj.source_type == "new":
+            color = "green"
+        elif obj.source_type == "registration":
+            color = "blue"
+        else:
+            color = "black"
+        return format_html('<span style="color: {};">{}</span>', color, obj.get_source_type_display())
+
+    colored_source_type.short_description = "Source Type"

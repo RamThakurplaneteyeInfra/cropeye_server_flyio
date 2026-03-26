@@ -40,14 +40,14 @@ try:
     from .models import Industry
     @admin.register(Industry)
     class IndustryAdmin(admin.ModelAdmin):
-        list_display = ('name', 'test_phone_number', 'description', 'view_all_data_link', 'created_at', 'updated_at')
+        list_display = ('name', 'crop_type', 'test_phone_number', 'description', 'view_all_data_link', 'created_at', 'updated_at')
         search_fields = ('name', 'description', 'test_phone_number')
         list_filter = ('created_at', 'updated_at')
         ordering = ('name',)
         
         fieldsets = (
             (None, {
-                'fields': ('name', 'description'),
+                'fields': ('name', 'description','crop_type'),
                 'description': 'Enter the industry name (e.g., "Industry A", "Industry B") and optional description.'
             }),
             ('Test Credentials', {
@@ -291,8 +291,12 @@ class UserAdmin(DjangoUserAdmin):
         }),
     )
     list_display    = (
+<<<<<<< Updated upstream
         'phone_number', 'username', 'email', 'aadhaar_number', 'role', 'industry',
         'get_created_by_email',
+=======
+        'phone_number', 'username', 'email', 'role', 'industry', 'get_crop_type','get_created_by_email',
+>>>>>>> Stashed changes
         'is_active', 'is_staff', 'is_superuser', 'date_joined'
     )
     list_filter     = ('role', 'industry', 'is_active', 'is_staff', 'is_superuser', 'created_by')
@@ -309,6 +313,22 @@ class UserAdmin(DjangoUserAdmin):
     get_created_by_email.short_description = 'Created By (Email)'
     get_created_by_email.admin_order_field = 'created_by__email'
     
+    def get_industry_name(self, obj):
+        return obj.industry.name if obj.industry else "-"
+    get_industry_name.short_description = "Industry"
+
+    # Display Crop Type from Industry
+    def get_crop_type(self, obj):
+        return obj.industry.crop_type if obj.industry else "-"
+    get_crop_type.short_description = "Crop Type"
+
+    def get_readonly_fields(self, request, obj=None):
+
+        if not request.user.is_superuser:
+            return ('industry')
+        return super().get_readonly_fields(request, obj)
+
+
     def get_queryset(self, request):
         """Filter users by industry for non-superusers. Uses select_related to avoid N+1 queries."""
         qs = super().get_queryset(request)

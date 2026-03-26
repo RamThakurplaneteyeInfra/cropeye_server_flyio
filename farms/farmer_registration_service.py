@@ -6,7 +6,7 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from .models import Farm, Plot, SoilType, CropType, IrrigationType
+from .models import Farm, Plot, SoilType, CropType, IrrigationType, SoilReport
 from users.multi_tenant_utils import get_user_industry
 import logging
 
@@ -104,50 +104,46 @@ class CompleteFarmerRegistrationService:
     
     @staticmethod
     @transaction.atomic
-    def register_complete_farmer(data, field_officer):
+    def register_complete_farmer(data, field_officer, industry_slug=None):
         """
-        Complete farmer registration in a single atomic transaction
+        Complete farmer registration in a single atomic transaction.
+        When industry_slug is provided ('sugarcane' or 'grapes'), payload is validated
+        so only that crop's data is accepted (proper segregation).
         
         Args:
             data: Dictionary containing all registration data
             field_officer: Field officer creating the registration
+            industry_slug: Optional 'sugarcane' or 'grapes' to enforce industry-specific payload
             
         Returns:
             Dictionary with created objects and their IDs
         """
         try:
-            # Debug: Log incoming data structure
-            logger.info(f"register_complete_farmer called with data keys: {list(data.keys())}")
+            logger.info(f"register_complete_farmer called with data keys: {list(data.keys())}, industry_slug={industry_slug}")
             if 'plot' in data:
                 logger.info(f"Single plot format - plot keys: {list(data.get('plot', {}).keys())}")
-                logger.info(f"Boundary in data['plot']: {'boundary' in data.get('plot', {})}, value: {data.get('plot', {}).get('boundary')}")
             if 'plots' in data:
                 logger.info(f"Multiple plots format - {len(data.get('plots', []))} plots")
             
-            # Step 1: Create Farmer (User)
             farmer = CompleteFarmerRegistrationService._create_farmer(data.get('farmer', {}), field_officer)
 
-            # Handle multiple plots, farms, and irrigations
             created_entities = []
             plots_data = data.get('plots', [])
 
-            # Support single plot registration for backward compatibility
             if 'plot' in data and not plots_data:
                 plot_data_dict = data.get('plot', {})
-                logger.info(f"Converting single plot format - plot_data keys: {list(plot_data_dict.keys())}")
-                logger.info(f"Boundary in single plot data: {'boundary' in plot_data_dict}, value: {plot_data_dict.get('boundary')}")
                 plots_data.append({
                     'plot': plot_data_dict,
                     'farm': data.get('farm'),
-                    'irrigation': data.get('irrigation')
+                    'soil_report': data.get('soil_report'),
+                    'irrigation': data.get('irrigation'),
+                    'plantation': data.get('plantation'),
                 })
 
             for idx, entity_data in enumerate(plots_data):
                 plot = None
                 if entity_data.get('plot'):
                     plot_data_to_create = entity_data['plot']
-                    logger.info(f"Processing plot {idx+1} - plot_data keys: {list(plot_data_to_create.keys())}")
-                    logger.info(f"Boundary in entity_data['plot']: {'boundary' in plot_data_to_create}, value type: {type(plot_data_to_create.get('boundary'))}, value: {plot_data_to_create.get('boundary')}")
                     plot = CompleteFarmerRegistrationService._create_plot(
                         plot_data_to_create, farmer, field_officer
                     )
@@ -155,14 +151,10 @@ class CompleteFarmerRegistrationService:
                 farm = None
                 farm_data = {}
                 if entity_data.get('farm') and plot:
-                    # Merge top-level farm data (like plantation_date) if not in individual farm data
                     farm_data = entity_data['farm'].copy() if entity_data.get('farm') else {}
                     
-                    # If plantation_date is not in individual farm data, check top level
                     if not farm_data.get('plantation_date') and data.get('farm', {}).get('plantation_date'):
                         farm_data['plantation_date'] = data['farm']['plantation_date']
-                    
-                    # If other farm fields are missing, use top-level as fallback
                     if not farm_data.get('address') and data.get('farm', {}).get('address'):
                         farm_data['address'] = data['farm']['address']
                     if not farm_data.get('area_size') and data.get('farm', {}).get('area_size'):
@@ -171,10 +163,7 @@ class CompleteFarmerRegistrationService:
                         farm_data['soil_type_name'] = data['farm']['soil_type_name']
                     if not farm_data.get('crop_type_name') and data.get('farm', {}).get('crop_type_name'):
                         farm_data['crop_type_name'] = data['farm']['crop_type_name']
-                    # Handle plantation_type - check individual farm data first, then fallback to top-level
-                    # Only merge from top-level if NOT present in individual farm data
                     if 'plantation_type_id' not in farm_data and 'plantation_type' not in farm_data:
-                        # Not in individual farm data, check top-level
                         if data.get('farm', {}).get('plantation_type_id'):
                             farm_data['plantation_type_id'] = data['farm']['plantation_type_id']
                         elif data.get('farm', {}).get('plantation_type'):
@@ -183,18 +172,15 @@ class CompleteFarmerRegistrationService:
                                 farm_data['plantation_type_id'] = int(plantation_type_str)
                             else:
                                 farm_data['plantation_type'] = plantation_type_str
-                    # Handle planting_method - check individual farm data first, then fallback to top-level
-                    # Only merge from top-level if NOT present in individual farm data
                     if 'planting_method_id' not in farm_data and 'planting_method' not in farm_data:
-                        # Not in individual farm data, check top-level
                         if data.get('farm', {}).get('planting_method_id'):
                             farm_data['planting_method_id'] = data['farm']['planting_method_id']
                         elif data.get('farm', {}).get('planting_method'):
-                            planting_method_str = data['farm']['planting_method']
-                            if isinstance(planting_method_str, str) and planting_method_str.isdigit():
-                                farm_data['planting_method_id'] = int(planting_method_str)
+                            pm = data['farm']['planting_method']
+                            if isinstance(pm, str) and pm.isdigit():
+                                farm_data['planting_method_id'] = int(pm)
                             else:
-                                farm_data['planting_method'] = planting_method_str
+                                farm_data['planting_method'] = pm
                     if not farm_data.get('spacing_a') and data.get('farm', {}).get('spacing_a'):
                         farm_data['spacing_a'] = data['farm']['spacing_a']
                     if not farm_data.get('spacing_b') and data.get('farm', {}).get('spacing_b'):
@@ -206,16 +192,39 @@ class CompleteFarmerRegistrationService:
                     if not farm_data.get('farm_document') and data.get('farm', {}).get('farm_document'):
                         farm_data['farm_document'] = data['farm']['farm_document']
 
+                    if industry_slug:
+                        expected_crop = industry_slug.lower().strip()
+                        given_crop = (farm_data.get('crop_type_name') or '').strip().lower()
+                        if given_crop and given_crop != expected_crop:
+                            raise serializers.ValidationError(
+                                f"This endpoint is for {expected_crop} registration only. "
+                                f"Received crop_type_name '{farm_data.get('crop_type_name')}'. "
+                                f"Use /api/farms/register-farmer/{given_crop}/ for that crop."
+                            )
+                        farm_data['crop_type_name'] = expected_crop.capitalize() if expected_crop == 'sugarcane' else 'Grapes'
+
                     farm = CompleteFarmerRegistrationService._create_farm(
-                        farm_data, farmer, field_officer, plot
+                        farm_data, farmer, field_officer, plot, industry_slug=industry_slug
                     )
+
+                soil_report = None
+                if entity_data.get('soil_report') and farm:
+                    soil_report = CompleteFarmerRegistrationService._create_soil_report(
+                        entity_data['soil_report'], farm
+                    )
+                plantation_record = None
+                if entity_data.get('plantation') and farm:
+                    plantation_record = CompleteFarmerRegistrationService._create_plantation_record(
+                        entity_data['plantation'], farm
+                    )
+
 
                 irrigation = None
                 if entity_data.get('irrigation') and farm:
                     irrigation = CompleteFarmerRegistrationService._create_farm_irrigation(
                         entity_data['irrigation'], farm, field_officer, farm_data
                     )
-                created_entities.append({'plot': plot, 'farm': farm, 'irrigation': irrigation})
+                created_entities.append({'plot': plot, 'farm': farm, 'irrigation': irrigation, 'soil_report': soil_report,'plantation': plantation_record})
 
                 # Manually sync each plot to all FastAPI services after unified registration
                 if plot:
@@ -355,7 +364,7 @@ class CompleteFarmerRegistrationService:
         
         if existing_plot:
             raise serializers.ValidationError(
-                f"Plot GAT {plot_data['gat_number']} in {plot_data['village']} already exists"
+                "GAT number and plot number already exist for this village and district."
             )
         
         # Get industry from field officer
@@ -432,8 +441,8 @@ class CompleteFarmerRegistrationService:
         return plot
     
     @staticmethod
-    def _create_farm(farm_data, farmer, field_officer, plot=None):
-        """Create farm and assign to farmer"""
+    def _create_farm(farm_data, farmer, field_officer, plot=None, industry_slug=None):
+        """Create farm and assign to farmer. industry_slug is for validation only (sugarcane/grapes)."""
         if not farm_data:
             return None
         
@@ -465,7 +474,11 @@ class CompleteFarmerRegistrationService:
                 crop_type = CropType.objects.get(id=farm_data['crop_type_id'])
             except CropType.DoesNotExist:
                 raise serializers.ValidationError(f"Crop type ID {farm_data['crop_type_id']} not found")
-        elif farm_data.get('crop_type_name'):
+        elif farm_data.get('crop_type_name') or farm_data.get('crop_type'):
+         
+            if not farm_data.get('crop_type_name') and farm_data.get('crop_type'):
+                farm_data = dict(farm_data)
+                farm_data['crop_type_name'] = farm_data['crop_type']
             # Get plantation_type and planting_method as strings (choice values)
             # Support both direct string values and backward compatibility with IDs
             plantation_type_str = farm_data.get('plantation_type') or ''
@@ -643,6 +656,20 @@ class CompleteFarmerRegistrationService:
         if farm_document is not None and not hasattr(farm_document, 'read'):
             farm_document = None
 
+        _variety_subtype_map = {
+            'wine': 'wine_grapes',
+            'Wine': 'wine_grapes',
+            'wine grapes': 'wine_grapes',
+            'Wine Grapes': 'wine_grapes',
+            'table grapes': 'table_grapes',
+            'Table Grapes': 'table_grapes',
+            'table': 'table_grapes',
+            'Table': 'table_grapes',
+        }
+        raw_variety_subtype = farm_data.get('variety_subtype')
+        normalized_variety_subtype = _variety_subtype_map.get(raw_variety_subtype, raw_variety_subtype)
+        logger.info(f"variety_subtype: '{raw_variety_subtype}' -> '{normalized_variety_subtype}'")
+
         create_kwargs = dict(
             address=farm_data['address'],
             area_size=farm_data['area_size'],
@@ -657,7 +684,7 @@ class CompleteFarmerRegistrationService:
             industry=industry,
             plantation_date=plantation_date,
             variety_type=farm_data.get('variety_type'),
-            variety_subtype=farm_data.get('variety_subtype'),
+            variety_subtype=normalized_variety_subtype,
             variety_timing=farm_data.get('variety_timing'),
             plant_age=farm_data.get('plant_age'),
             foundation_pruning_date=farm_data.get('foundation_pruning_date'),
@@ -750,18 +777,99 @@ class CompleteFarmerRegistrationService:
         return irrigation
     
     @staticmethod
-    def get_registration_summary(farmer, plot, farm, irrigation):
+    def _create_soil_report(soil_data, farm):
+        """Create soil report"""
+        if not soil_data:
+            return None
+
+        # Handle nested soil_report
+        if 'soil_report' in soil_data:
+            soil_data = soil_data['soil_report']
+
+        logger.info(f"Saving soil report for farm {farm.id} with data: {soil_data}")
+
+        soil_report, created = SoilReport.objects.update_or_create(
+            farm=farm,
+            defaults={
+                'nitrogen': soil_data.get('nitrogen'),
+                'phosphorus': soil_data.get('phosphorus'),
+                'potassium': soil_data.get('potassium'),
+                'soil_ph': soil_data.get('soil_ph'),
+                'cec': soil_data.get('cec'),
+                'organic_carbon': soil_data.get('organic_carbon'),
+                'bulk_density': soil_data.get('bulk_density'),
+                'fe': soil_data.get('fe'),
+                'soil_organic_carbon': soil_data.get('soil_organic_carbon'),
+            }
+        )
+        return soil_report
+    @staticmethod
+    def _create_plantation_record(plantation_data, farm):
+        """
+        Create or update a plantation record for a farm.
+        Handles new plantation vs registration plantation based on farm.plant_age
+        """
+        if not plantation_data or not farm:
+            return None
+
+        # Determine type
+        plant_age = farm.plant_age if hasattr(farm, 'plant_age') else plantation_data.get('plant_age')
+
+        # Common fields for all plantations
+        common_fields = {
+            'plantation_date': plantation_data.get('plantation_date'),
+            'foundation_pruning_date': plantation_data.get('foundation_pruning_date'),
+            'fruit_pruning_date': plantation_data.get('fruit_pruning_date'),
+            'grafted_variety': plantation_data.get('grafted_variety'),
+            'soil_type': plantation_data.get('soil_type'),
+        }
+
+        # New plantation fields
+        new_fields = {
+            'rootstock': plantation_data.get('rootstock'),
+            'grafting_date': plantation_data.get('grafting_date'),
+        }
+
+        # Registration plantation fields
+        reg_fields = {
+            'irrigation_type': plantation_data.get('irrigation_type'),
+            'last_harvesting_date': plantation_data.get('last_harvesting_date'),
+            'intercropping': plantation_data.get('intercropping'),
+            'intercropping_crop_name': plantation_data.get('intercropping_crop_name'),
+        }
+
+        # Merge fields based on type
+        if plant_age in ['0_1', '0_2', '0_3', '1_2']:  # New Plantation (includes 0_3 for grapes)
+            record_fields = {**common_fields, **new_fields}
+        else:  # Registration Plantation
+            record_fields = {**common_fields, **reg_fields}
+
+        from .models import PlantationRecord
+        plantation_record, _ = PlantationRecord.objects.update_or_create(
+            farm=farm,
+            defaults=record_fields
+        )
+        return plantation_record
+
+
+    @staticmethod
+    def get_registration_summary(farmer, plot, farm, soil_report=None, irrigation=None,plantation=None):
         """Get a summary of the complete registration"""
-        from users.serializers import UserSerializer # Keep this import
-        from .serializers import PlotSerializer, FarmSerializer, FarmIrrigationSerializer
-        
+        from users.serializers import UserSerializer
+        from .serializers import PlotSerializer, FarmSerializer, FarmIrrigationSerializer, SoilReportSerializer, PlantationRecordSerializer
+
         summary = {
+            'farmer': UserSerializer(farmer).data if farmer else None,
             'plot': PlotSerializer(plot).data if plot else None,
             'farm': FarmSerializer(farm).data if farm else None,
-            'irrigation': FarmIrrigationSerializer(irrigation).data if irrigation else None,
+            'soil_report': SoilReportSerializer(soil_report).data if soil_report else None,
+            'irrigation': FarmIrrigationSerializer(irrigation).data if irrigation and irrigation.__class__.__name__ == 'FarmIrrigation' else None,
+            'plantation': PlantationRecordSerializer(plantation).data if plantation else None,
         }
-        
+
         return summary
+  
+
     
     @staticmethod
     def _convert_geojson_to_geometry(geojson_data):

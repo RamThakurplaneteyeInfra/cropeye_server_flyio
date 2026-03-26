@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Task, TaskComment, TaskAttachment
+from .models import Task, TaskComment, TaskAttachment, Notification
 
 User = get_user_model()
 
@@ -64,4 +64,13 @@ class TaskCommentCreateSerializer(serializers.ModelSerializer):
 class TaskAttachmentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TaskAttachment
-        fields = ('file', 'description') 
+        fields = ('file', 'description')
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    related_task = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = Notification
+        fields = ('id', 'message', 'is_read', 'created_at', 'related_task')
+        read_only_fields = ('id', 'message', 'created_at', 'related_task') 

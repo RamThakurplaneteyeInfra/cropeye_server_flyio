@@ -76,4 +76,38 @@ class TaskAttachment(models.Model):
     description = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
-        return f"Attachment for {self.task.title}" 
+        return f"Attachment for {self.task.title}"
+
+
+class Notification(models.Model):
+    """
+    Alert for task assignment. Created only when a Grapes industry
+    field officer assigns a task to a farmer. Each user sees only their own.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        help_text="The recipient (farmer) who sees this alert",
+    )
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    related_task = models.ForeignKey(
+        Task,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='task_notifications',
+        help_text="Task this notification is about",
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['user', 'is_read']),
+        ]
+
+    def __str__(self):
+        return f"Notification for {self.user.username}: {self.message[:50]}" 

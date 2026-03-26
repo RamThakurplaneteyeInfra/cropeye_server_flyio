@@ -1,15 +1,29 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
 import re
-
 
 class Industry(models.Model):
     """
     Industry model for multi-tenant isolation.
     Each industry has its own Industry Admin (Owner) and users.
+    Only one crop type per industry.
     """
+    CROP_TYPE_CHOICES = [
+        ('sugarcane', 'Sugarcane'),
+        ('grapes', 'Grapes'),
+    ]
+
     name = models.CharField(max_length=200, unique=True)
     description = models.TextField(blank=True)
+    crop_type = models.CharField(
+        max_length=50,
+        choices=CROP_TYPE_CHOICES,
+        null=False,
+        blank=False,
+        default='sugarcane',  # default value to avoid migration issues
+        help_text="Select the crop type for this Industry"
+    )
     test_phone_number = models.CharField(
         max_length=15, 
         blank=True, 
@@ -24,7 +38,7 @@ class Industry(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         verbose_name = "Industry"
         verbose_name_plural = "Industries"
@@ -32,7 +46,6 @@ class Industry(models.Model):
     
     def __str__(self):
         return self.name
-
 
 class Role(models.Model):
     """

@@ -23,7 +23,7 @@ class CanManageTasks(HasRolePermission):
 
 class CanViewTasks(HasRolePermission):
     roles = [
-        'admin', 'manager', 'fieldofficer', 
+        'admin', 'manager', 'fieldofficer',
         'farmer', 'owner', 'agronomist', 'qualitycontrol'
     ]
 
@@ -35,3 +35,22 @@ class CanViewTasks(HasRolePermission):
             obj.assigned_to == user or
             obj.created_by == user
         )
+
+
+class IsGrapesFarmerOrFieldOfficer(BasePermission):
+    """
+    Allow only Grapes industry farmers and field officers to use notification APIs.
+    Does not affect other industries or roles.
+    """
+
+    def has_permission(self, request, view):
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        user = request.user
+        if user.is_superuser:
+            return True
+        if not user.has_any_role(['farmer', 'fieldofficer']):
+            return False
+        if not getattr(user, 'industry', None):
+            return False
+        return getattr(user.industry, 'crop_type', None) == 'grapes'

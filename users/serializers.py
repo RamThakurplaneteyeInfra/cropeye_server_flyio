@@ -452,57 +452,56 @@ class UserCreateSerializer(serializers.ModelSerializer):
         # Handle 0 as None (for auto-determination)
         if value == 0 or value == '0':
             return None
-        
-        # NEW: Check if it's a role name instead of role ID
-        # Map role names to role IDs
-        role_name_mapping = {
-            'farmer': 1,
-            'fieldofficer': 2,
-            'field_officer': 2,
-            'field-officer': 2,
-            'manager': 3,
-            'owner': 4
+
+        # Normalize role name aliases so lookup is by name, not hardcoded ID
+        role_name_aliases = {
+            'field_officer': 'fieldofficer',
+            'field-officer': 'fieldofficer',
+            'field officer': 'fieldofficer',
         }
-        
-        # If value is a role name (string), convert it to role ID
+
+        # If value is a string, try to look up role by name directly from DB
         if isinstance(value, str):
             value_lower = value.lower()
-            if value_lower in role_name_mapping:
-                role_id_int = role_name_mapping[value_lower]
-                logger.info(f"Converted role name '{value}' to role ID: {role_id_int}")
-                # Continue with validation using the converted ID
-                value = role_id_int
-            else:
-                # Not a role name, try to convert to integer (might be "1", "2", etc.)
+            # Normalize aliases to canonical name
+            value_lower = role_name_aliases.get(value_lower, value_lower)
+            # Try DB lookup by name first
+            try:
+                role = Role.objects.get(name=value_lower)
+                logger.info(f"Validated role by name '{value_lower}' -> ID: {role.id} ({role.display_name})")
+                return role.id
+            except Role.DoesNotExist:
+                # Not a role name string — try to parse as integer ID
                 try:
                     value = int(value)
                 except (ValueError, TypeError) as e:
-                    logger.error(f"Failed to convert role_id to integer. Value: {repr(value)}, Type: {type(value)}, Error: {e}")
+                    logger.error(f"Failed to match role name or parse as integer. Value: {repr(value)}, Error: {e}")
                     raise serializers.ValidationError(
-                        f"Invalid role ID format. Received: '{value}' (type: {type(value).__name__}). "
-                        f"Must be a valid integer (1, 2, 3, or 4) or role name (farmer, fieldofficer, manager, owner)."
+                        f"Invalid role. Received: '{value}'. "
+                        f"Use a role name (farmer, fieldofficer, manager, owner) or a valid role ID."
                     )
-        
-        # Convert to int - handle both string and integer inputs
+
+        # value is now an integer — look up role by ID
         try:
             role_id_int = int(value)
         except (ValueError, TypeError) as e:
-            logger.error(f"Failed to convert role_id to integer. Value: {repr(value)}, Type: {type(value)}, Error: {e}")
+            logger.error(f"Failed to convert role_id to integer. Value: {repr(value)}, Error: {e}")
             raise serializers.ValidationError(
                 f"Invalid role ID format. Received: '{value}' (type: {type(value).__name__}). "
-                f"Must be a valid integer (1, 2, 3, or 4) or role name (farmer, fieldofficer, manager, owner)."
+                f"Must be a valid role name (farmer, fieldofficer, manager, owner) or integer role ID."
             )
-        
-        # Validate that the role exists in database
+
+        # Validate that the role exists in database by ID
         try:
             role = Role.objects.get(id=role_id_int)
             logger.info(f"Validated role_id: {role_id_int} -> {role.name} ({role.display_name})")
         except Role.DoesNotExist:
             logger.error(f"Role with ID {role_id_int} does not exist in database")
             raise serializers.ValidationError(
-                f"Role with ID {role_id_int} does not exist. Valid role IDs: 1 (Farmer), 2 (Field Officer), 3 (Manager), 4 (Owner)."
+                f"Role with ID {role_id_int} does not exist. "
+                f"Use a role name (farmer, fieldofficer, manager, owner) or a valid role ID."
             )
-        
+
         return role_id_int  # Return as integer
     
     def validate_email(self, value):
@@ -565,20 +564,21 @@ class UserCreateSerializer(serializers.ModelSerializer):
                 
                 if raw_role_id is not None and raw_role_id != '' and raw_role_id != 0 and raw_role_id != '0':
                     logger.info(f"Found role_id in raw request data: {raw_role_id} (type: {type(raw_role_id)})")
-                    # Check if it's a role name and convert it
-                    role_name_mapping = {
-                        'farmer': 1,
-                        'fieldofficer': 2,
-                        'field_officer': 2,
-                        'field-officer': 2,
-                        'manager': 3,
-                        'owner': 4
-                    }
+                    # Resolve role name string to DB id by looking up from DB directly
                     if isinstance(raw_role_id, str):
                         raw_role_id_lower = raw_role_id.strip().lower()
-                        if raw_role_id_lower in role_name_mapping:
-                            raw_role_id = role_name_mapping[raw_role_id_lower]
-                            logger.info(f"Converted role name '{raw_role_id_lower}' to role ID: {raw_role_id}")
+                        role_name_aliases = {
+                            'field_officer': 'fieldofficer',
+                            'field-officer': 'fieldofficer',
+                            'field officer': 'fieldofficer',
+                        }
+                        raw_role_id_lower = role_name_aliases.get(raw_role_id_lower, raw_role_id_lower)
+                        try:
+                            resolved = Role.objects.get(name=raw_role_id_lower)
+                            raw_role_id = resolved.id
+                            logger.info(f"Resolved role name '{raw_role_id_lower}' to DB id: {raw_role_id}")
+                        except Role.DoesNotExist:
+                            pass  # Not a role name — leave as-is (may be a numeric string)
                     role_id = raw_role_id
         
         # Validate and convert role_id to integer if provided
@@ -592,20 +592,19 @@ class UserCreateSerializer(serializers.ModelSerializer):
                         if role_id.lower() in ['null', 'undefined', 'none', '']:
                             role_id = None
                         else:
-                            # Check if it's a role name
-                            role_name_mapping = {
-                                'farmer': 1,
-                                'fieldofficer': 2,
-                                'field_officer': 2,
-                                'field-officer': 2,
-                                'manager': 3,
-                                'owner': 4
-                            }
+                            # Resolve role name to DB id directly (no hardcoded mapping)
                             role_id_lower = role_id.lower()
-                            if role_id_lower in role_name_mapping:
-                                role_id = role_name_mapping[role_id_lower]
-                                logger.info(f"Converted role name '{role_id_lower}' to role ID: {role_id}")
-                            else:
+                            role_name_aliases = {
+                                'field_officer': 'fieldofficer',
+                                'field-officer': 'fieldofficer',
+                                'field officer': 'fieldofficer',
+                            }
+                            role_id_lower = role_name_aliases.get(role_id_lower, role_id_lower)
+                            try:
+                                resolved = Role.objects.get(name=role_id_lower)
+                                role_id = resolved.id
+                                logger.info(f"Resolved role name '{role_id_lower}' to DB id: {role_id}")
+                            except Role.DoesNotExist:
                                 # Not a role name, try to convert to integer (might be "1", "2", etc.)
                                 role_id = int(role_id)
                     else:
@@ -635,11 +634,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
             
             if request_user.has_role('manager'):
                 # Manager creates field officer by default
-                role_id = 2  # fieldofficer
+                role_id = Role.objects.get(name='fieldofficer').id
                 logger.info(f"Auto-determined role_id: {role_id} (fieldofficer) for manager")
             elif request_user.has_role('fieldofficer'):
                 # Field officer creates farmer by default
-                role_id = 1  # farmer
+                role_id = Role.objects.get(name='farmer').id
                 logger.info(f"Auto-determined role_id: {role_id} (farmer) for field officer")
             else:
                 # Owner/superuser must specify role_id

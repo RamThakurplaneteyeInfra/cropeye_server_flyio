@@ -1,9 +1,10 @@
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
-from .models import Task, TaskComment, TaskAttachment
+from .models import Task, TaskComment, TaskAttachment, Notification
 from .serializers import (
     TaskSerializer,
     TaskCreateSerializer,
@@ -11,9 +12,10 @@ from .serializers import (
     TaskCommentSerializer,
     TaskCommentCreateSerializer,
     TaskAttachmentSerializer,
-    TaskAttachmentCreateSerializer
+    TaskAttachmentCreateSerializer,
+    NotificationSerializer,
 )
-from .permissions import CanManageTasks, CanViewTasks
+from .permissions import CanManageTasks, CanViewTasks, IsGrapesFarmerOrFieldOfficer
 
 class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
@@ -98,3 +100,46 @@ class TaskAttachmentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         task = get_object_or_404(Task, pk=self.kwargs['task_pk'])
         serializer.save(task=task, uploaded_by=self.request.user)
+
+
+# --- Notification (alert) API: Grapes industry field officer -> farmer only ---
+
+class NotificationListView(APIView):
+    """GET all notifications for the logged-in user (Grapes farmer/field officer only)."""
+    permission_classes = [permissions.IsAuthenticated, IsGrapesFarmerOrFieldOfficer]
+
+    def get(self, request):
+        qs = Notification.objects.filter(user=request.user).order_by('-created_at')
+        serializer = NotificationSerializer(qs, many=True)
+        return Response({'count': qs.count(), 'results': serializer.data})
+
+
+class NotificationUnreadListView(APIView):
+    """GET only unread notifications for the logged-in user."""
+    permission_classes = [permissions.IsAuthenticated, IsGrapesFarmerOrFieldOfficer]
+
+    def get(self, request):
+        qs = Notification.objects.filter(user=request.user, is_read=False).order_by('-created_at')
+        serializer = NotificationSerializer(qs, many=True)
+        return Response({'count': qs.count(), 'results': serializer.data})
+
+
+class NotificationUnreadCountView(APIView):
+    """GET unread notification count for the logged-in user."""
+    permission_classes = [permissions.IsAuthenticated, IsGrapesFarmerOrFieldOfficer]
+
+    def get(self, request):
+        count = Notification.objects.filter(user=request.user, is_read=False).count()
+        return Response({'unread_count': count})
+
+
+class NotificationMarkReadView(APIView):
+    """POST to mark a notification as read. Only the owner can mark it."""
+    permission_classes = [permissions.IsAuthenticated, IsGrapesFarmerOrFieldOfficer]
+
+    def post(self, request, pk):
+        notification = get_object_or_404(Notification, pk=pk, user=request.user)
+        notification.is_read = True
+        notification.save()
+        serializer = NotificationSerializer(notification)
+        return Response(serializer.data, status=status.HTTP_200_OK)

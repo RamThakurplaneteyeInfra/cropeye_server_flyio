@@ -77,7 +77,7 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 # For production, set ALLOWED_HOSTS environment variable with specific domains
 allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '*')
 if allowed_hosts_env == '*':
-    ALLOWED_HOSTS = ['*']  # Allow all hosts for local network access
+    ALLOWED_HOSTS = ['*',"http://localhost:5174"]  # Allow all hosts for local network access
 else:
     ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',') if host.strip()]
 

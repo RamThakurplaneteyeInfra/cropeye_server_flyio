@@ -17,7 +17,10 @@ from .models import (
     FarmSensor,
     FarmIrrigation,
     IrrigationType,
-    GrapseReport 
+    GrapseReport,
+    SoilReport,
+    PlantationRecord
+
 )
 
 User = get_user_model()
@@ -467,6 +470,7 @@ class FarmWithIrrigationSerializer(serializers.ModelSerializer):
 
 
 class FarmSerializer(serializers.ModelSerializer):
+
     farm_owner = UserSerializer(read_only=True)
     farm_owner_id = serializers.PrimaryKeyRelatedField(
         source='farm_owner',
@@ -636,7 +640,8 @@ class FarmSerializer(serializers.ModelSerializer):
         if 'industry' not in validated_data or validated_data['industry'] is None:
             from .utils import get_user_industry
             validated_data['industry'] = get_user_industry(user)
-        # --- Handle crop_type_name ---
+
+        # Handle crop_type_name conversion
         crop_name = validated_data.pop('crop_type_name', None)
         if crop_name:
             try:
@@ -646,34 +651,22 @@ class FarmSerializer(serializers.ModelSerializer):
                     'crop_type_name': f"CropType '{crop_name}' does not exist."
                 })
 
-
-        # --- Ensure grapes and sugarcane fields are present ---
+        # --- Ensure grape-specific fields exist ---
         grapes_fields = [
-        
-            'variety_type',
-            'variety_subtype',
-            'variety_timing',
-            'plant_age',
-            'foundation_pruning_date',
-            'fruit_pruning_date',
-            'last_harvesting_date',
-            'resting_period_days',
-            'row_spacing',
-            'plant_spacing',
-            'flow_rate_liter_per_hour',
-            'emitters_per_plant',
-            'crop_variety',
+            'variety_type', 'variety_subtype', 'variety_timing', 'plant_age',
+            'foundation_pruning_date', 'fruit_pruning_date', 'last_harvesting_date',
+            'resting_period_days', 'row_spacing', 'plant_spacing',
+            'flow_rate_liter_per_hour', 'emitters_per_plant', 'crop_variety',
+          
         ]
 
-       
+        for field in grapes_fields:
+            validated_data.setdefault(field, None)
 
-        for field in grapes_fields :
-            validated_data.setdefault(field, None)  # Default to None if missing
-
-        # Create farm with all validated data
+        # Create farm
         farm = Farm.objects.create(**validated_data)
-
         return farm
+
 
     def update(self, instance, validated_data):
         # Ensure update works for PATCH/PUT
@@ -703,32 +696,21 @@ class FarmSerializer(serializers.ModelSerializer):
                 } if irrigation.location else None
             }
         else:
-            # Always include irrigation key even if None
             representation['irrigation'] = None
 
-        # --- Ensure grapes fields always exist ---
+        # --- Ensure grape fields always exist in response ---
         grapes_fields = [
-            
-            'variety_type',
-            'variety_subtype',
-            'variety_timing',
-            'plant_age',
-            'foundation_pruning_date',
-            'fruit_pruning_date',
-            'last_harvesting_date',
-            'resting_period_days',
-            'row_spacing',
-            'plant_spacing',
-            'flow_rate_liter_per_hour',
-            'emitters_per_plant',
-            'crop_variety',
+            'variety_type', 'variety_subtype', 'variety_timing', 'plant_age',
+            'foundation_pruning_date', 'fruit_pruning_date', 'last_harvesting_date',
+            'resting_period_days', 'row_spacing', 'plant_spacing',
+            'flow_rate_liter_per_hour', 'emitters_per_plant', 'crop_variety',
         ]
 
         for field in grapes_fields:
-           representation.setdefault(field, None)
-
+            representation.setdefault(field, None)
 
         return representation
+
 
 class FarmDetailSerializer(FarmSerializer):
     images      = FarmImageSerializer(many=True, read_only=True)
@@ -780,3 +762,84 @@ class GrapseReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = GrapseReport
         fields = '__all__'
+
+class SoilReportSerializer(serializers.ModelSerializer):
+    farm_id = serializers.IntegerField(write_only=True, required=False)
+
+    class Meta:
+        model = SoilReport
+        fields = [
+            'id',                 # soil report ID
+            'farm_id',            # used when creating/updating
+            'farm',               # read-only related farm info
+            'nitrogen',
+            'phosphorus',
+            'potassium',
+            'soil_ph',
+            'cec',
+            'organic_carbon',
+            'bulk_density',
+            'fe',
+            'soil_organic_carbon'
+        ]
+        read_only_fields = ['farm'] 
+    def validate(self, attrs):
+        # Make farm_id required only on creation
+        if self.instance is None and 'farm_id' not in attrs:
+            raise serializers.ValidationError({"farm_id": "This field is required on creation."})
+        return attrs
+    def create(self, validated_data):
+        farm_id = validated_data.pop('farm_id')
+        try:
+            farm = Farm.objects.get(id=farm_id)
+        except Farm.DoesNotExist:
+            raise serializers.ValidationError({"farm_id": "Farm not found"})
+        return SoilReport.objects.create(farm=farm, **validated_data)
+    def update(self, instance, validated_data):
+        farm_id = validated_data.pop('farm_id', None)
+        if farm_id:
+            instance.farm = Farm.objects.get(id=farm_id)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+class PlantationRecordSerializer(serializers.ModelSerializer):
+    farm = serializers.PrimaryKeyRelatedField(read_only=True)
+ # This will accept UUID
+
+    class Meta:
+        model = PlantationRecord
+        fields = "__all__"
+        read_only_fields = ("source_type", "created_at")
+
+    def validate(self, data):
+        # Determine the farm (either from data or existing instance)
+        farm = data.get("farm") or getattr(self.instance, "farm", None)
+
+        if not farm or not farm.plant_age:
+            raise serializers.ValidationError("Farm must have a valid plant age set.")
+
+        farm_age = farm.plant_age
+
+        # Determine required fields based on farm age
+        if farm_age == "0_2":
+            required_fields = ["rootstock", "grafting_date"]
+        elif farm_age == "2_13":
+            required_fields = ["irrigation_type", "last_harvesting_date", "intercropping"]
+        else:
+            required_fields = []
+
+        # Only enforce required fields on **creation** (not on updates)
+        if self.instance is None:  # creating new record
+            missing = [
+                field for field in required_fields
+                if not data.get(field)
+            ]
+
+            if missing:
+                raise serializers.ValidationError({
+                    field: f"Required for farm age {farm_age}"
+                    for field in missing
+                })
+
+        return data

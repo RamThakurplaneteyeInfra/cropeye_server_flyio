@@ -397,7 +397,14 @@ class Farm(models.Model):
     )
 
     address = models.TextField()
-    area_size = models.DecimalField(max_digits=10, decimal_places=2, help_text="Size in acres")
+    area_size = models.DecimalField(
+    max_digits=10,
+    decimal_places=4,
+    null=True,
+    blank=True,
+    help_text="Size in acres"
+)
+
     soil_type = models.ForeignKey(
         SoilType,
         on_delete=models.SET_NULL,
@@ -456,10 +463,15 @@ class Farm(models.Model):
 
     PLANT_AGE_CHOICES = [
         ('0_2', '0-2 years'),
-        ('2_3', '2-3 years'),
-        ('above_3', 'Above 3 years'),
+        ('0_3', '0-3 years'),
+        ('2_13', '2-13 years'),
     ]
     plant_age = models.CharField(max_length=10, choices=PLANT_AGE_CHOICES, null=True, blank=True)
+        # ===============================
+    # GRAPES EXTRA SECTION
+    # ===============================
+
+
     # Grapes-specific lifecycle fields
     foundation_pruning_date = models.DateField(
         null=True,
@@ -512,6 +524,7 @@ class Farm(models.Model):
 
     # =====================================
 
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -537,7 +550,36 @@ class Farm(models.Model):
             return int(plants)
         except (ValueError, ZeroDivisionError, TypeError):
             return None
-    
+    def clean(self):
+        if self.crop_type and self.crop_type.crop_type.lower() == "grapes":
+
+            if self.plant_age in ['2_3', 'above_3']:
+
+                if not self.grape_variety:
+                    raise ValidationError({
+                        "grape_variety": "Grape variety is required for plants older than 0-2 years."
+                    })
+
+                if not self.irrigation_type:
+                    raise ValidationError({
+                        "irrigation_type": "Irrigation type is required for plants older than 0-2 years."
+                    })
+
+                if not self.grape_soil_type:
+                    raise ValidationError({
+                        "grape_soil_type": "Soil type is required for plants older than 0-2 years."
+                    })
+
+                if not self.plantation_date:
+                    raise ValidationError({
+                        "plantation_date": "Plantation date is required for plants older than 0-2 years."
+                    })
+
+        super().clean()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
     
 
 class FarmIrrigation(models.Model):
@@ -648,3 +690,140 @@ class GrapseReport(models.Model):
 
     def __str__(self):
         return f"{self.plot} – {self.get_file_type_display()} – {self.uploaded_at.date()}"
+class SoilReport(models.Model):
+    farm = models.OneToOneField('Farm', on_delete=models.CASCADE, related_name='soil_report')
+
+    nitrogen = models.CharField(max_length=100, null=True, blank=True)
+    phosphorus = models.CharField(max_length=100, null=True, blank=True)
+    potassium = models.CharField(max_length=100, null=True, blank=True)
+    soil_ph = models.CharField(max_length=50, null=True, blank=True)
+    cec = models.CharField(max_length=100, null=True, blank=True)
+    organic_carbon = models.CharField(max_length=100, null=True, blank=True)
+    bulk_density = models.CharField(max_length=100, null=True, blank=True)
+    fe = models.CharField(max_length=100, null=True, blank=True)
+    soil_organic_carbon = models.CharField(max_length=100, null=True, blank=True)
+
+
+    def __str__(self):
+        return f"Soil Report for Farm ID {self.farm.id}"
+
+
+class PlantationRecord(models.Model):
+
+    # 🔹 Source Type (New Plantation / Registration)
+    SOURCE_CHOICES = [
+        ("new", "New Plantation"),
+        ("registration", "Registration"),
+    ]
+
+    source_type = models.CharField(
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        editable=False
+    )
+
+    # 🔹 Reference to existing farms_farm table
+    farm = models.ForeignKey(
+        "farms.Farm",
+        on_delete=models.CASCADE
+    )
+
+    # 🔹 Common Dates (required for both)
+    plantation_date = models.DateField()
+    grafting_date = models.DateField(blank=True, null=True)  # Conditional
+    foundation_pruning_date = models.DateField()
+    fruit_pruning_date = models.DateField()
+
+    # 🔹 Registration Only Field (conditionally required)
+    last_harvesting_date = models.DateField(null=True, blank=True)
+    irrigation_type = models.CharField(
+        max_length=20,
+        choices=[("drip","Drip"), ("flood","Flood")],
+        null=True,
+        blank=True
+    )
+    intercropping = models.CharField(
+        max_length=3,
+        choices=[("yes","Yes"), ("no","No")],
+        null=True,
+        blank=True
+    )
+    intercropping_crop_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="Name of intercrop (only when intercropping=yes, Grapes only)"
+    )
+
+    # 🔹 Rootstock (conditionally required for New Plantation)
+    ROOTSTOCK_CHOICES = [
+        ("dogridge", "Dogridge"),
+        ("bangalore", "Bangalore"),
+        ("banglore", "Banglore"),
+        ("polso", "Polso"),
+        ("polson", "Polson"),
+    ]
+    rootstock = models.CharField(max_length=30, choices=ROOTSTOCK_CHOICES, null=True, blank=True)
+
+    # 🔹 Grafted Variety (common)
+    GRAPE_VARIETY_CHOICES = [
+        ("thompson", "Thompson"),
+        ("tas_a_ganesh", "Tas-A-Ganesh"),
+        ("sonaka", "Sonaka"),
+        ("manik_chaman", "Manik Chaman"),
+        ("flame_seedless", "Flame Seedless"),
+        ("crimson_seedless", "Crimson Seedless"),
+        ("red_globe", "Red Globe"),
+        ("sudhakar_seedless", "Sudhakar Seedless"),
+        ("allison", "Allison"),
+        ("timco", "Timco"),
+        ("ard_35", "ARD-35"),
+        ("ard_36", "ARD-36"),
+    ]
+    grafted_variety = models.CharField(max_length=30, choices=GRAPE_VARIETY_CHOICES)
+
+    # 🔹 Soil Type (common)
+    SOIL_TYPE_CHOICES = [
+        ("clay", "Clay"),
+        ("loam", "Loam"),
+        ("sandy_loam", "Sandy Loam"),
+        ("sandy", "Sandy"),
+    ]
+    soil_type = models.CharField(max_length=30, choices=SOIL_TYPE_CHOICES)
+
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+
+    # 🔹 Validation based on Farm.plant_age (choice keys)
+    def clean(self):
+        if not self.farm or not self.farm.plant_age:
+            raise ValidationError("Farm must have a valid plant age set.")
+
+        farm_age = self.farm.plant_age  # '0_2', '0_3', or '2_13'
+
+        if farm_age in ("0_2", "0_3"):
+            # New Plantation (0-2 years or 0-3 years)
+            self.source_type = "new"
+            # Conditional fields for New Plantation must be filled
+            missing = []
+            for field in ["rootstock", "grafting_date"]:
+                if not getattr(self, field):
+                    missing.append(field)
+            if missing:
+                raise ValidationError({f: "Required for New Plantation" for f in missing})
+
+        elif farm_age == "2_13":
+            # Registration
+            self.source_type = "registration"
+            # Conditional fields for Registration must be filled
+            missing = []
+            for field in ["irrigation_type", "last_harvesting_date", "intercropping"]:
+                if not getattr(self, field):
+                    missing.append(field)
+            if missing:
+                raise ValidationError({f: "Required for Registration" for f in missing})
+
+        else:
+            raise ValidationError("Plant age of farm is invalid.")
+
+    def __str__(self):
+        return f"{self.farm} - {self.get_source_type_display()}"
