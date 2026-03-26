@@ -291,12 +291,7 @@ class UserAdmin(DjangoUserAdmin):
         }),
     )
     list_display    = (
-<<<<<<< Updated upstream
-        'phone_number', 'username', 'email', 'aadhaar_number', 'role', 'industry',
-        'get_created_by_email',
-=======
-        'phone_number', 'username', 'email', 'role', 'industry', 'get_crop_type','get_created_by_email',
->>>>>>> Stashed changes
+        'phone_number', 'username', 'email', 'aadhaar_number', 'role', 'industry', 'get_crop_type', 'get_created_by_email',
         'is_active', 'is_staff', 'is_superuser', 'date_joined'
     )
     list_filter     = ('role', 'industry', 'is_active', 'is_staff', 'is_superuser', 'created_by')

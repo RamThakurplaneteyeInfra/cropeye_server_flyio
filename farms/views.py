@@ -11,10 +11,7 @@ from rest_framework.exceptions import ValidationError
 from django.db.models import Prefetch
 from users.multi_tenant_utils import filter_by_industry, get_user_industry
 from rest_framework.viewsets import ModelViewSet
-<<<<<<< Updated upstream
-=======
 from rest_framework import status
->>>>>>> Stashed changes
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from .models import (
     SoilType,
@@ -422,121 +419,21 @@ class FarmViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
-<<<<<<< Updated upstream
     @action(
         detail=False,
         methods=['post'],
-        url_path='register-farmer',
+        url_path='register-farmer/(?P<industry_slug>sugarcane|grapes)',
         parser_classes=[JSONParser, MultiPartParser, FormParser],
     )
-    def register_farmer(self, request):
-    
-        """
-        Complete farmer registration endpoint - creates farmer, plot, farm, and irrigation in one call
-        Supports both single plot and multiple plots registration.
-
-        Optional farm document (same as Farm.farm_document on add-farm):
-        - Send multipart/form-data with file field **farm_document**.
-        - Include **farmer**, **plot**, **farm**, **irrigation** as JSON strings (single plot), OR **plots** as a JSON array string.
-        - The file is stored on the created Farm (single plot: top-level farm; multiple plots: first plot's farm).
-
-        Farmer JSON may include **aadhaar_number** after other profile fields; farm document is uploaded as the file field above.
-
-        Expected JSON structure (multiple plots):
-        {
-            "farmer": {
-                "username": "testmulti",
-                "email": "testmulti@example.com",
-                "password": "farm@123",
-                "first_name": "testmulti",
-                "last_name": "Patil",
-                "phone_number": "9870543211",
-                "address": "Main Street",
-                "village": "Test Village",
-                "district": "Test District",
-                "state": "Maharashtra",
-                "taluka": "Test Taluka"
-            },
-            "plots": [
-                {
-                    "plot": {
-                        "gat_number": "866",
-                        "plot_number": "07",
-                        "village": "Test Village",
-                        "taluka": "Test Taluka",
-                        "district": "Test District",
-                        "state": "Maharashtra",
-                        "country": "India",
-                        "pin_code": "422605",
-                        "location": {"type": "Point", "coordinates": [74.215, 19.567]}
-                    },
-                    "farm": {
-                        "address": "Farm at GAT 866",
-                        "area_size": "2.5",
-                        "spacing_a": "3.0",
-                        "spacing_b": "1.5",
-                        "soil_type_name": "Black Soil",
-                        "crop_type_name": "Sugarcane",
-                        "plantation_type": "adsali"
-                    },
-                    "irrigation": {
-                        "irrigation_type_name": "drip",
-                        "status": true,
-                        "flow_rate_lph": 2.0,
-                        "emitters_count": 120
-                    }
-                },
-                {
-                    "plot": {
-                        "gat_number": "904",
-                        "plot_number": "05",
-                        "village": "Test Village",
-                        "taluka": "Test Taluka",
-                        "district": "Test District",
-                        "state": "Maharashtra",
-                        "country": "India",
-                        "pin_code": "422605",
-                        "location": {"type": "Point", "coordinates": [74.218, 19.569]}
-                    },
-                    "farm": {
-                        "address": "Farm at GAT 907",
-                        "area_size": "3.0",
-                        "spacing_a": "2.0",
-                        "spacing_b": "1.0",
-                        "soil_type_name": "Red Soil",
-                        "crop_type_name": "sugarcane",
-                        "plantation_type": "pre_seasonal"
-                    },
-                    "irrigation": {
-                        "irrigation_type_name": "flood",
-                        "motor_horsepower": 7.5,
-                        "pipe_width_inches": 4.0,
-                        "distance_motor_to_plot_m": 50.0
-                    }
-                }
-            ]
-        }
-        
-        For backward compatibility, single plot format is also supported:
-        {
-            "farmer": {...},
-            "plot": {...},
-            "farm": {...},
-            "irrigation": {...}
-        }
-        
-        Note: Irrigation type names should be lowercase: "drip", "flood", "sprinkler", etc.
-=======
-    @action(detail=False, methods=['post'], url_path='register-farmer/(?P<industry_slug>sugarcane|grapes)')
     def register_farmer(self, request, industry_slug=None):
         """
         Industry-specific farmer registration. Creates farmer, plot, farm, and irrigation.
         Use:
-          POST /api/farms/register-farmer/sugarcane/  — sugarcane industry only (plantation_type, irrigation, etc.)
-          POST /api/farms/register-farmer/grapes/     — grapes industry only (plant_age, plantation record, etc.)
+          POST /api/farms/register-farmer/sugarcane/  — sugarcane industry only
+          POST /api/farms/register-farmer/grapes/     — grapes industry only
         Field officer's industry must match the slug; payload is validated for that crop only.
-        Supports single plot or multiple plots. Irrigation type names: lowercase (drip, flood, sprinkler, etc.).
->>>>>>> Stashed changes
+        Supports single plot or multiple plots. Supports multipart/form-data with farm_document.
+        Irrigation type names: lowercase (drip, flood, sprinkler, etc.).
         """
         user = request.user
 
@@ -568,17 +465,11 @@ class FarmViewSet(viewsets.ModelViewSet):
                 prepare_register_farmer_request_data,
             )
 
-<<<<<<< Updated upstream
             payload = prepare_register_farmer_request_data(request)
             result = CompleteFarmerRegistrationService.register_complete_farmer(
                 payload,
-                user
-=======
-            result = CompleteFarmerRegistrationService.register_complete_farmer(
-                request.data,
                 user,
                 industry_slug=slug_normalized
->>>>>>> Stashed changes
             )
 
             registration_summary = []
@@ -611,13 +502,7 @@ class FarmViewSet(viewsets.ModelViewSet):
             }, status=201)
 
         except ValidationError as e:
-<<<<<<< Updated upstream
-            return Response(
-                {'success': False, 'error': e.detail if hasattr(e, 'detail') else str(e)},
-                status=400,
-            )
-=======
-            error_detail = e.detail
+            error_detail = e.detail if hasattr(e, 'detail') else str(e)
             if isinstance(error_detail, dict):
                 msg = error_detail.get('plot') or error_detail.get('non_field_errors')
                 if msg is None and error_detail:
@@ -639,7 +524,6 @@ class FarmViewSet(viewsets.ModelViewSet):
                 'success': False,
                 'error': str(error_detail),
             }, status=400)
->>>>>>> Stashed changes
         except Exception as e:
             return Response({
                 'success': False,
