@@ -175,7 +175,8 @@ class LoginView(APIView):
                 industry_data = {
                     'id': user.industry.id,
                     'name': user.industry.name,
-                    'description': user.industry.description
+                    'description': user.industry.description,
+                    'crop_type': user.industry.crop_type,
                 }
             
             logger.info(f"Successful login for user: {user.username} (ID: {user.id})")
