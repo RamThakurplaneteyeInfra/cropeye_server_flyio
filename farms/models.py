@@ -779,6 +779,22 @@ class PlantationRecord(models.Model):
         ("timco", "Timco"),
         ("ard_35", "ARD-35"),
         ("ard_36", "ARD-36"),
+        ("thompson_seedless", "Thompson seedless"),
+        ("super_sonaka", "super sonaka"),
+        ("crimson", "Crimson"),
+        ("ssn", "SSN"),
+        ("sharad_seedless", "sharad seedless"),
+        ("mama_jambo", "mama jambo"),
+        ("rk", "RK"),
+        ("arra_35", "Arra-35"),
+        ("arra_36", "Arra-36"),
+        ("grape_1530", "1530"),
+        ("grape_1557", "1557"),
+        ("clone", "clone"),
+        ("timson", "Timson"),
+        ("raigad_purple", "Raigad purple"),
+        ("anushka", "Anushka"),
+        ("nanasaheb_purple", "nanasaheb purple"),
     ]
     grafted_variety = models.CharField(max_length=30, choices=GRAPE_VARIETY_CHOICES)
 
